@@ -1,592 +1,658 @@
-<script>
-  const ws = new WebSocket("ws://192.168.0.208:3000");
+<!DOCTYPE html>
+<html>
 
-  const canvas = document.getElementById("game");
-  const ctx = canvas.getContext("2d");
-  const chatBox = document.getElementById("chatBox");
-  const chatInput = document.getElementById("chatInput");
-
-  const PLAYER_SIZE = 20;
-  const PLAYER_SPEED = 180;
-
-  const TICK_RATE = 20;
-  const TICK_DELTA = 1 / TICK_RATE;
-  const TICK_MS = 1000 / TICK_RATE;
-
-  const LOCAL_PREDICTION_SCALE = 0.6;
-  const ATTACK_RANGE = 70;
-  const ATTACK_HALF_ANGLE_RAD = Math.PI / 4;
-
-  let myId = null;
-
-  const players = {};
-  const renderPlayers = {};
-
-  const localPlayer = {
-    x: 0,
-    y: 0,
-    facing: { x: 0, y: -1 },
-  };
-
-  const localRenderPlayer = {
-    x: 0,
-    y: 0,
-  };
-
-  const inputState = {
-    up: false,
-    down: false,
-    left: false,
-    right: false,
-  };
-
-  let nextInputSeq = 1;
-  let lastSentInputSeq = 0;
-
-  let isChatting = false;
-  const chatMessages = [];
-  const MAX_CHAT_LINES = 8;
-
-  let attackHeld = false;
-
-  function clamp(value, min, max) {
-    return Math.max(min, Math.min(max, value));
-  }
-
-  function lerp(a, b, t) {
-    return a + (b - a) * t;
-  }
-
-  function normalize(dx, dy) {
-    const length = Math.hypot(dx, dy);
-    if (length === 0) return { x: 0, y: 0 };
-    return { x: dx / length, y: dy / length };
-  }
-
-  function copyPlayerState(source) {
-    return {
-      id: source.id,
-      x: source.x,
-      y: source.y,
-      hp: source.hp,
-      maxHp: source.maxHp,
-      lastProcessedInput: source.lastProcessedInput || 0,
-      isAttacking: !!source.isAttacking,
-      isHit: !!source.isHit,
-      facing: source.facing
-        ? { x: source.facing.x, y: source.facing.y }
-        : { x: 0, y: -1 },
-    };
-  }
-
-  function applyInputToPosition(position, state, deltaTime, facingHolder) {
-    let dx = 0;
-    let dy = 0;
-
-    if (state.up) dy -= 1;
-    if (state.down) dy += 1;
-    if (state.left) dx -= 1;
-    if (state.right) dx += 1;
-
-    if (dx === 0 && dy === 0) return;
-
-    const dir = normalize(dx, dy);
-    dx = dir.x;
-    dy = dir.y;
-
-    if (facingHolder) {
-      facingHolder.x = dx;
-      facingHolder.y = dy;
+<head>
+  <meta charset="UTF-8" />
+  <title>godfuck</title>
+  <style>
+    body {
+      margin: 0;
+      background: #111;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      color: white;
+      font-family: sans-serif;
     }
 
-    position.x += dx * PLAYER_SPEED * deltaTime;
-    position.y += dy * PLAYER_SPEED * deltaTime;
-
-    position.x = clamp(position.x, 0, canvas.width - PLAYER_SIZE);
-    position.y = clamp(position.y, 0, canvas.height - PLAYER_SIZE);
-  }
-
-  function sendCurrentInputState() {
-    console.log("[SEND INPUT] try", {
-      readyState: ws.readyState,
-      myId,
-      inputState: { ...inputState },
-    });
-
-    if (ws.readyState !== WebSocket.OPEN) {
-      console.log("[SEND INPUT] blocked: ws not open");
-      return;
+    canvas {
+      background: #222;
+      border: 1px solid #555;
     }
 
-    if (!myId) {
-      console.log("[SEND INPUT] blocked: myId missing");
-      return;
+    .chat-box {
+      position: fixed;
+      left: 12px;
+      bottom: 52px;
+      width: 320px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 14px;
     }
 
-    lastSentInputSeq = nextInputSeq++;
+    .chat-line {
+      background: rgba(0, 0, 0, 0.5);
+      padding: 6px;
+      border-radius: 6px;
+    }
 
-    const packet = {
-      type: "input",
-      seq: lastSentInputSeq,
-      up: inputState.up,
-      down: inputState.down,
-      left: inputState.left,
-      right: inputState.right,
+    .chat-input {
+      position: fixed;
+      left: 12px;
+      bottom: 12px;
+      width: 320px;
+      padding: 6px;
+      display: none;
+    }
+
+    .chat-input.active {
+      display: block;
+    }
+  </style>
+</head>
+
+<body>
+
+  <canvas id="game" width="500" height="500"></canvas>
+  <div id="chatBox" class="chat-box"></div>
+  <input id="chatInput" class="chat-input" />
+
+  <!-- 🔥 你的 JS 放這裡 -->
+  <script>
+    const ws = new WebSocket("ws://192.168.0.208:3000");
+
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const chatBox = document.getElementById("chatBox");
+    const chatInput = document.getElementById("chatInput");
+
+    const PLAYER_SIZE = 20;
+    const PLAYER_SPEED = 180;
+
+    const TICK_RATE = 20;
+    const TICK_DELTA = 1 / TICK_RATE;
+    const TICK_MS = 1000 / TICK_RATE;
+
+    const LOCAL_PREDICTION_SCALE = 0.6;
+    const ATTACK_RANGE = 70;
+    const ATTACK_HALF_ANGLE_RAD = Math.PI / 4;
+
+    let myId = null;
+
+    const players = {};
+    const renderPlayers = {};
+
+    const localPlayer = {
+      x: 0,
+      y: 0,
+      facing: { x: 0, y: -1 },
     };
 
-    console.log("[SEND INPUT] send", packet);
-    ws.send(JSON.stringify(packet));
-  }
-
-  function sendAttack() {
-    console.log("[SEND ATTACK] try", {
-      readyState: ws.readyState,
-      myId,
-    });
-
-    if (ws.readyState !== WebSocket.OPEN) {
-      console.log("[SEND ATTACK] blocked: ws not open");
-      return;
-    }
-
-    if (!myId) {
-      console.log("[SEND ATTACK] blocked: myId missing");
-      return;
-    }
-
-    const packet = { type: "attack" };
-    console.log("[SEND ATTACK] send", packet);
-    ws.send(JSON.stringify(packet));
-  }
-
-  function sendChat(text) {
-    console.log("[SEND CHAT] try", {
-      readyState: ws.readyState,
-      myId,
-      text,
-    });
-
-    if (ws.readyState !== WebSocket.OPEN) {
-      console.log("[SEND CHAT] blocked: ws not open");
-      return;
-    }
-
-    if (!myId) {
-      console.log("[SEND CHAT] blocked: myId missing");
-      return;
-    }
-
-    const packet = {
-      type: "chat",
-      text,
+    const localRenderPlayer = {
+      x: 0,
+      y: 0,
     };
 
-    console.log("[SEND CHAT] send", packet);
-    ws.send(JSON.stringify(packet));
-  }
+    const inputState = {
+      up: false,
+      down: false,
+      left: false,
+      right: false,
+    };
 
-  function openChat() {
-    isChatting = true;
-    chatInput.classList.add("active");
-    chatInput.value = "";
-    chatInput.focus();
-  }
+    let nextInputSeq = 1;
+    let lastSentInputSeq = 0;
 
-  function closeChat() {
-    isChatting = false;
-    chatInput.classList.remove("active");
-    chatInput.blur();
-    chatInput.value = "";
-  }
+    let isChatting = false;
+    const chatMessages = [];
+    const MAX_CHAT_LINES = 8;
 
-  function addChatLine(playerId, text) {
-    chatMessages.push(`${playerId}: ${text}`);
+    let attackHeld = false;
 
-    if (chatMessages.length > MAX_CHAT_LINES) {
-      chatMessages.shift();
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
     }
 
-    renderChatMessages();
-  }
-
-  function renderChatMessages() {
-    chatBox.innerHTML = "";
-
-    for (const line of chatMessages) {
-      const div = document.createElement("div");
-      div.className = "chat-line";
-      div.textContent = line;
-      chatBox.appendChild(div);
+    function lerp(a, b, t) {
+      return a + (b - a) * t;
     }
-  }
 
-  function stopAllMovementInput() {
-    inputState.up = false;
-    inputState.down = false;
-    inputState.left = false;
-    inputState.right = false;
-    sendCurrentInputState();
-  }
+    function normalize(dx, dy) {
+      const length = Math.hypot(dx, dy);
+      if (length === 0) return { x: 0, y: 0 };
+      return { x: dx / length, y: dy / length };
+    }
 
-  ws.onopen = () => {
-    console.log("[WS] open");
-  };
+    function copyPlayerState(source) {
+      return {
+        id: source.id,
+        x: source.x,
+        y: source.y,
+        hp: source.hp,
+        maxHp: source.maxHp,
+        lastProcessedInput: source.lastProcessedInput || 0,
+        isAttacking: !!source.isAttacking,
+        isHit: !!source.isHit,
+        facing: source.facing
+          ? { x: source.facing.x, y: source.facing.y }
+          : { x: 0, y: -1 },
+      };
+    }
 
-  ws.onerror = (err) => {
-    console.log("[WS] error", err);
-  };
+    function applyInputToPosition(position, state, deltaTime, facingHolder) {
+      let dx = 0;
+      let dy = 0;
 
-  ws.onclose = (event) => {
-    console.log("[WS] close", event.code, event.reason);
-  };
+      if (state.up) dy -= 1;
+      if (state.down) dy += 1;
+      if (state.left) dx -= 1;
+      if (state.right) dx += 1;
 
-  ws.onmessage = (event) => {
-    console.log("[WS] raw message", event.data);
+      if (dx === 0 && dy === 0) return;
 
-    const data = JSON.parse(event.data);
-    console.log("[WS] parsed type =", data.type, "full =", data);
+      const dir = normalize(dx, dy);
+      dx = dir.x;
+      dy = dir.y;
 
-    if (data.type === "init") {
-      console.log("[INIT] got init, id =", data.id);
-
-      myId = data.id;
-
-      for (const id in data.players) {
-        players[id] = copyPlayerState(data.players[id]);
-        renderPlayers[id] = {
-          x: data.players[id].x,
-          y: data.players[id].y,
-        };
+      if (facingHolder) {
+        facingHolder.x = dx;
+        facingHolder.y = dy;
       }
 
-      if (players[myId]) {
-        localPlayer.x = players[myId].x;
-        localPlayer.y = players[myId].y;
-        localPlayer.facing = { ...players[myId].facing };
+      position.x += dx * PLAYER_SPEED * deltaTime;
+      position.y += dy * PLAYER_SPEED * deltaTime;
 
-        localRenderPlayer.x = localPlayer.x;
-        localRenderPlayer.y = localPlayer.y;
-      }
-
-      return;
+      position.x = clamp(position.x, 0, canvas.width - PLAYER_SIZE);
+      position.y = clamp(position.y, 0, canvas.height - PLAYER_SIZE);
     }
 
-    if (data.type === "playerJoined") {
-      const p = copyPlayerState(data.player);
-      players[p.id] = p;
+    function sendCurrentInputState() {
+      console.log("[SEND INPUT] try", {
+        readyState: ws.readyState,
+        myId,
+        inputState: { ...inputState },
+      });
 
-      if (!renderPlayers[p.id]) {
-        renderPlayers[p.id] = { x: p.x, y: p.y };
-      }
-
-      return;
-    }
-
-    if (data.type === "state") {
-      for (const id in data.players) {
-        const serverPlayer = copyPlayerState(data.players[id]);
-        players[id] = serverPlayer;
-
-        if (!renderPlayers[id]) {
-          renderPlayers[id] = { x: serverPlayer.x, y: serverPlayer.y };
-        }
-
-        if (id === myId) {
-          localPlayer.x = serverPlayer.x;
-          localPlayer.y = serverPlayer.y;
-          localPlayer.facing = { ...serverPlayer.facing };
-
-          if (serverPlayer.lastProcessedInput < lastSentInputSeq) {
-            applyInputToPosition(
-              localPlayer,
-              inputState,
-              TICK_DELTA * LOCAL_PREDICTION_SCALE,
-              localPlayer.facing
-            );
-          }
-        }
-      }
-
-      return;
-    }
-
-    if (data.type === "remove") {
-      delete players[data.id];
-      delete renderPlayers[data.id];
-      return;
-    }
-
-    if (data.type === "chat") {
-      addChatLine(data.playerId, data.text);
-      return;
-    }
-  };
-
-  function updateKeyState(key, isPressed) {
-    let changed = false;
-
-    if (key === "w" || key === "ArrowUp") {
-      changed = inputState.up !== isPressed || changed;
-      inputState.up = isPressed;
-    }
-
-    if (key === "s" || key === "ArrowDown") {
-      changed = inputState.down !== isPressed || changed;
-      inputState.down = isPressed;
-    }
-
-    if (key === "a" || key === "ArrowLeft") {
-      changed = inputState.left !== isPressed || changed;
-      inputState.left = isPressed;
-    }
-
-    if (key === "d" || key === "ArrowRight") {
-      changed = inputState.right !== isPressed || changed;
-      inputState.right = isPressed;
-    }
-
-    if (changed) {
-      sendCurrentInputState();
-    }
-  }
-
-  document.addEventListener("keydown", (e) => {
-    console.log("[KEYDOWN]", e.key, e.code, "repeat=", e.repeat);
-
-    if (e.key === "Enter") {
-      e.preventDefault();
-
-      if (!isChatting) {
-        openChat();
-        stopAllMovementInput();
+      if (ws.readyState !== WebSocket.OPEN) {
+        console.log("[SEND INPUT] blocked: ws not open");
         return;
       }
 
-      const text = chatInput.value.trim();
-      if (text) {
-        sendChat(text);
+      if (!myId) {
+        console.log("[SEND INPUT] blocked: myId missing");
+        return;
       }
 
-      closeChat();
-      return;
+      lastSentInputSeq = nextInputSeq++;
+
+      const packet = {
+        type: "input",
+        seq: lastSentInputSeq,
+        up: inputState.up,
+        down: inputState.down,
+        left: inputState.left,
+        right: inputState.right,
+      };
+
+      console.log("[SEND INPUT] send", packet);
+      ws.send(JSON.stringify(packet));
     }
 
-    if (e.key === "Escape" && isChatting) {
-      e.preventDefault();
-      closeChat();
-      return;
-    }
+    function sendAttack() {
+      console.log("[SEND ATTACK] try", {
+        readyState: ws.readyState,
+        myId,
+      });
 
-    if (isChatting) {
-      return;
-    }
-
-    if (e.code === "Space") {
-      e.preventDefault();
-
-      if (e.repeat) return;
-
-      if (!attackHeld) {
-        attackHeld = true;
-        sendAttack();
-      }
-      return;
-    }
-
-    updateKeyState(e.key, true);
-  });
-
-  document.addEventListener("keyup", (e) => {
-    console.log("[KEYUP]", e.key, e.code);
-
-    if (isChatting) {
-      return;
-    }
-
-    if (e.code === "Space") {
-      e.preventDefault();
-      attackHeld = false;
-      return;
-    }
-
-    updateKeyState(e.key, false);
-  });
-
-  let accumulator = 0;
-  let lastTime = performance.now();
-
-  function simulateLocalTick() {
-    applyInputToPosition(
-      localPlayer,
-      inputState,
-      TICK_DELTA * LOCAL_PREDICTION_SCALE,
-      localPlayer.facing
-    );
-  }
-
-  function updateRenderPlayers() {
-    for (const id in players) {
-      if (!renderPlayers[id]) {
-        renderPlayers[id] = { x: players[id].x, y: players[id].y };
+      if (ws.readyState !== WebSocket.OPEN) {
+        console.log("[SEND ATTACK] blocked: ws not open");
+        return;
       }
 
-      if (id === myId) {
-        localRenderPlayer.x = lerp(localRenderPlayer.x, localPlayer.x, 0.25);
-        localRenderPlayer.y = lerp(localRenderPlayer.y, localPlayer.y, 0.25);
+      if (!myId) {
+        console.log("[SEND ATTACK] blocked: myId missing");
+        return;
+      }
 
-        renderPlayers[id].x = localRenderPlayer.x;
-        renderPlayers[id].y = localRenderPlayer.y;
-      } else {
-        renderPlayers[id].x = lerp(renderPlayers[id].x, players[id].x, 0.2);
-        renderPlayers[id].y = lerp(renderPlayers[id].y, players[id].y, 0.2);
+      const packet = { type: "attack" };
+      console.log("[SEND ATTACK] send", packet);
+      ws.send(JSON.stringify(packet));
+    }
+
+    function sendChat(text) {
+      console.log("[SEND CHAT] try", {
+        readyState: ws.readyState,
+        myId,
+        text,
+      });
+
+      if (ws.readyState !== WebSocket.OPEN) {
+        console.log("[SEND CHAT] blocked: ws not open");
+        return;
+      }
+
+      if (!myId) {
+        console.log("[SEND CHAT] blocked: myId missing");
+        return;
+      }
+
+      const packet = {
+        type: "chat",
+        text,
+      };
+
+      console.log("[SEND CHAT] send", packet);
+      ws.send(JSON.stringify(packet));
+    }
+
+    function openChat() {
+      isChatting = true;
+      chatInput.classList.add("active");
+      chatInput.value = "";
+      chatInput.focus();
+    }
+
+    function closeChat() {
+      isChatting = false;
+      chatInput.classList.remove("active");
+      chatInput.blur();
+      chatInput.value = "";
+    }
+
+    function addChatLine(playerId, text) {
+      chatMessages.push(`${playerId}: ${text}`);
+
+      if (chatMessages.length > MAX_CHAT_LINES) {
+        chatMessages.shift();
+      }
+
+      renderChatMessages();
+    }
+
+    function renderChatMessages() {
+      chatBox.innerHTML = "";
+
+      for (const line of chatMessages) {
+        const div = document.createElement("div");
+        div.className = "chat-line";
+        div.textContent = line;
+        chatBox.appendChild(div);
       }
     }
-  }
 
-  function drawHpBar(player, p) {
-    const barWidth = 26;
-    const barHeight = 4;
-    const x = p.x - 3;
-    const y = p.y - 12;
-
-    ctx.fillStyle = "#333";
-    ctx.fillRect(x, y, barWidth, barHeight);
-
-    const ratio = Math.max(0, player.hp / player.maxHp);
-    ctx.fillStyle = ratio > 0.5 ? "#32d74b" : ratio > 0.25 ? "#ffd60a" : "#ff453a";
-    ctx.fillRect(x, y, barWidth * ratio, barHeight);
-  }
-
-  function drawFacingArrow(player, p) {
-    const cx = p.x + PLAYER_SIZE / 2;
-    const cy = p.y + PLAYER_SIZE / 2;
-    const fx = player.facing.x;
-    const fy = player.facing.y;
-
-    const arrowLen = 16;
-    const tipX = cx + fx * arrowLen;
-    const tipY = cy + fy * arrowLen;
-
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(tipX, tipY);
-    ctx.stroke();
-  }
-
-  function drawAttackRange(player, p) {
-    if (!player.isAttacking) return;
-
-    const cx = p.x + PLAYER_SIZE / 2;
-    const cy = p.y + PLAYER_SIZE / 2;
-
-    const facing = player.facing || { x: 0, y: -1 };
-    const facingAngle = Math.atan2(facing.y, facing.x);
-    const startAngle = facingAngle - ATTACK_HALF_ANGLE_RAD;
-    const endAngle = facingAngle + ATTACK_HALF_ANGLE_RAD;
-
-    ctx.fillStyle = "rgba(255, 214, 10, 0.18)";
-    ctx.strokeStyle = "rgba(255, 214, 10, 0.55)";
-    ctx.lineWidth = 2;
-
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.arc(cx, cy, ATTACK_RANGE, startAngle, endAngle);
-    ctx.closePath();
-    ctx.fill();
-    ctx.stroke();
-  }
-
-  function drawPlayer(id, p) {
-    const player = players[id];
-    if (!player) return;
-
-    let color = id === myId ? "#ff4d4f" : "#4da6ff";
-    if (player.isAttacking) color = "#ffd60a";
-    if (player.isHit) color = "#ffffff";
-
-    drawAttackRange(player, p);
-
-    ctx.fillStyle = color;
-    ctx.fillRect(p.x, p.y, PLAYER_SIZE, PLAYER_SIZE);
-
-    drawHpBar(player, p);
-    drawFacingArrow(player, p);
-
-    ctx.fillStyle = "#fff";
-    ctx.font = "12px sans-serif";
-    ctx.fillText(`${id} (${player.hp})`, p.x - 4, p.y - 18);
-  }
-
-  function drawDebug() {
-    ctx.fillStyle = "#ddd";
-    ctx.font = "12px monospace";
-
-    ctx.fillText(
-      `input: U${+inputState.up} D${+inputState.down} L${+inputState.left} R${+inputState.right}`,
-      10,
-      20
-    );
-
-    ctx.fillText(`ws    : ${ws.readyState}`, 10, 40);
-    ctx.fillText(`myId  : ${myId || "null"}`, 10, 60);
-
-    if (myId && players[myId]) {
-      ctx.fillText(
-        `server: (${players[myId].x.toFixed(1)}, ${players[myId].y.toFixed(1)})`,
-        10,
-        80
-      );
-      ctx.fillText(
-        `logic : (${localPlayer.x.toFixed(1)}, ${localPlayer.y.toFixed(1)})`,
-        10,
-        100
-      );
-      ctx.fillText(
-        `render: (${localRenderPlayer.x.toFixed(1)}, ${localRenderPlayer.y.toFixed(1)})`,
-        10,
-        120
-      );
-      ctx.fillText(
-        `facing: (${localPlayer.facing.x.toFixed(2)}, ${localPlayer.facing.y.toFixed(2)})`,
-        10,
-        140
-      );
-      ctx.fillText(`acked : ${players[myId].lastProcessedInput}`, 10, 160);
-      ctx.fillText(`sent  : ${lastSentInputSeq}`, 10, 180);
-      ctx.fillText(`hp    : ${players[myId].hp}/${players[myId].maxHp}`, 10, 200);
-      ctx.fillText(`chat  : ${isChatting ? "typing" : "game"}`, 10, 220);
-    }
-  }
-
-  function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    for (const id in renderPlayers) {
-      drawPlayer(id, renderPlayers[id]);
+    function stopAllMovementInput() {
+      inputState.up = false;
+      inputState.down = false;
+      inputState.left = false;
+      inputState.right = false;
+      sendCurrentInputState();
     }
 
-    drawDebug();
-  }
+    ws.onopen = () => {
+      console.log("[WS] open");
+    };
 
-  function gameLoop(now) {
-    let frameTime = now - lastTime;
-    if (frameTime > 100) frameTime = 100;
-    lastTime = now;
+    ws.onerror = (err) => {
+      console.log("[WS] error", err);
+    };
 
-    accumulator += frameTime;
+    ws.onclose = (event) => {
+      console.log("[WS] close", event.code, event.reason);
+    };
 
-    while (accumulator >= TICK_MS) {
-      simulateLocalTick();
-      accumulator -= TICK_MS;
+    ws.onmessage = (event) => {
+      console.log("[WS] raw message", event.data);
+
+      const data = JSON.parse(event.data);
+      console.log("[WS] parsed type =", data.type, "full =", data);
+
+      if (data.type === "init") {
+        console.log("[INIT] got init, id =", data.id);
+
+        myId = data.id;
+
+        for (const id in data.players) {
+          players[id] = copyPlayerState(data.players[id]);
+          renderPlayers[id] = {
+            x: data.players[id].x,
+            y: data.players[id].y,
+          };
+        }
+
+        if (players[myId]) {
+          localPlayer.x = players[myId].x;
+          localPlayer.y = players[myId].y;
+          localPlayer.facing = { ...players[myId].facing };
+
+          localRenderPlayer.x = localPlayer.x;
+          localRenderPlayer.y = localPlayer.y;
+        }
+
+        return;
+      }
+
+      if (data.type === "playerJoined") {
+        const p = copyPlayerState(data.player);
+        players[p.id] = p;
+
+        if (!renderPlayers[p.id]) {
+          renderPlayers[p.id] = { x: p.x, y: p.y };
+        }
+
+        return;
+      }
+
+      if (data.type === "state") {
+        for (const id in data.players) {
+          const serverPlayer = copyPlayerState(data.players[id]);
+          players[id] = serverPlayer;
+
+          if (!renderPlayers[id]) {
+            renderPlayers[id] = { x: serverPlayer.x, y: serverPlayer.y };
+          }
+
+          if (id === myId) {
+            localPlayer.x = serverPlayer.x;
+            localPlayer.y = serverPlayer.y;
+            localPlayer.facing = { ...serverPlayer.facing };
+
+            if (serverPlayer.lastProcessedInput < lastSentInputSeq) {
+              applyInputToPosition(
+                localPlayer,
+                inputState,
+                TICK_DELTA * LOCAL_PREDICTION_SCALE,
+                localPlayer.facing
+              );
+            }
+          }
+        }
+
+        return;
+      }
+
+      if (data.type === "remove") {
+        delete players[data.id];
+        delete renderPlayers[data.id];
+        return;
+      }
+
+      if (data.type === "chat") {
+        addChatLine(data.playerId, data.text);
+        return;
+      }
+    };
+
+    function updateKeyState(key, isPressed) {
+      let changed = false;
+
+      if (key === "w" || key === "ArrowUp") {
+        changed = inputState.up !== isPressed || changed;
+        inputState.up = isPressed;
+      }
+
+      if (key === "s" || key === "ArrowDown") {
+        changed = inputState.down !== isPressed || changed;
+        inputState.down = isPressed;
+      }
+
+      if (key === "a" || key === "ArrowLeft") {
+        changed = inputState.left !== isPressed || changed;
+        inputState.left = isPressed;
+      }
+
+      if (key === "d" || key === "ArrowRight") {
+        changed = inputState.right !== isPressed || changed;
+        inputState.right = isPressed;
+      }
+
+      if (changed) {
+        sendCurrentInputState();
+      }
     }
 
-    updateRenderPlayers();
-    draw();
+    document.addEventListener("keydown", (e) => {
+      console.log("[KEYDOWN]", e.key, e.code, "repeat=", e.repeat);
+
+      if (e.key === "Enter") {
+        e.preventDefault();
+
+        if (!isChatting) {
+          openChat();
+          stopAllMovementInput();
+          return;
+        }
+
+        const text = chatInput.value.trim();
+        if (text) {
+          sendChat(text);
+        }
+
+        closeChat();
+        return;
+      }
+
+      if (e.key === "Escape" && isChatting) {
+        e.preventDefault();
+        closeChat();
+        return;
+      }
+
+      if (isChatting) {
+        return;
+      }
+
+      if (e.code === "Space") {
+        e.preventDefault();
+
+        if (e.repeat) return;
+
+        if (!attackHeld) {
+          attackHeld = true;
+          sendAttack();
+        }
+        return;
+      }
+
+      updateKeyState(e.key, true);
+    });
+
+    document.addEventListener("keyup", (e) => {
+      console.log("[KEYUP]", e.key, e.code);
+
+      if (isChatting) {
+        return;
+      }
+
+      if (e.code === "Space") {
+        e.preventDefault();
+        attackHeld = false;
+        return;
+      }
+
+      updateKeyState(e.key, false);
+    });
+
+    let accumulator = 0;
+    let lastTime = performance.now();
+
+    function simulateLocalTick() {
+      applyInputToPosition(
+        localPlayer,
+        inputState,
+        TICK_DELTA * LOCAL_PREDICTION_SCALE,
+        localPlayer.facing
+      );
+    }
+
+    function updateRenderPlayers() {
+      for (const id in players) {
+        if (!renderPlayers[id]) {
+          renderPlayers[id] = { x: players[id].x, y: players[id].y };
+        }
+
+        if (id === myId) {
+          localRenderPlayer.x = lerp(localRenderPlayer.x, localPlayer.x, 0.25);
+          localRenderPlayer.y = lerp(localRenderPlayer.y, localPlayer.y, 0.25);
+
+          renderPlayers[id].x = localRenderPlayer.x;
+          renderPlayers[id].y = localRenderPlayer.y;
+        } else {
+          renderPlayers[id].x = lerp(renderPlayers[id].x, players[id].x, 0.2);
+          renderPlayers[id].y = lerp(renderPlayers[id].y, players[id].y, 0.2);
+        }
+      }
+    }
+
+    function drawHpBar(player, p) {
+      const barWidth = 26;
+      const barHeight = 4;
+      const x = p.x - 3;
+      const y = p.y - 12;
+
+      ctx.fillStyle = "#333";
+      ctx.fillRect(x, y, barWidth, barHeight);
+
+      const ratio = Math.max(0, player.hp / player.maxHp);
+      ctx.fillStyle = ratio > 0.5 ? "#32d74b" : ratio > 0.25 ? "#ffd60a" : "#ff453a";
+      ctx.fillRect(x, y, barWidth * ratio, barHeight);
+    }
+
+    function drawFacingArrow(player, p) {
+      const cx = p.x + PLAYER_SIZE / 2;
+      const cy = p.y + PLAYER_SIZE / 2;
+      const fx = player.facing.x;
+      const fy = player.facing.y;
+
+      const arrowLen = 16;
+      const tipX = cx + fx * arrowLen;
+      const tipY = cy + fy * arrowLen;
+
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(tipX, tipY);
+      ctx.stroke();
+    }
+
+    function drawAttackRange(player, p) {
+      if (!player.isAttacking) return;
+
+      const cx = p.x + PLAYER_SIZE / 2;
+      const cy = p.y + PLAYER_SIZE / 2;
+
+      const facing = player.facing || { x: 0, y: -1 };
+      const facingAngle = Math.atan2(facing.y, facing.x);
+      const startAngle = facingAngle - ATTACK_HALF_ANGLE_RAD;
+      const endAngle = facingAngle + ATTACK_HALF_ANGLE_RAD;
+
+      ctx.fillStyle = "rgba(255, 214, 10, 0.18)";
+      ctx.strokeStyle = "rgba(255, 214, 10, 0.55)";
+      ctx.lineWidth = 2;
+
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.arc(cx, cy, ATTACK_RANGE, startAngle, endAngle);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    function drawPlayer(id, p) {
+      const player = players[id];
+      if (!player) return;
+
+      let color = id === myId ? "#ff4d4f" : "#4da6ff";
+      if (player.isAttacking) color = "#ffd60a";
+      if (player.isHit) color = "#ffffff";
+
+      drawAttackRange(player, p);
+
+      ctx.fillStyle = color;
+      ctx.fillRect(p.x, p.y, PLAYER_SIZE, PLAYER_SIZE);
+
+      drawHpBar(player, p);
+      drawFacingArrow(player, p);
+
+      ctx.fillStyle = "#fff";
+      ctx.font = "12px sans-serif";
+      ctx.fillText(`${id} (${player.hp})`, p.x - 4, p.y - 18);
+    }
+
+    function drawDebug() {
+      ctx.fillStyle = "#ddd";
+      ctx.font = "12px monospace";
+
+      ctx.fillText(
+        `input: U${+inputState.up} D${+inputState.down} L${+inputState.left} R${+inputState.right}`,
+        10,
+        20
+      );
+
+      ctx.fillText(`ws    : ${ws.readyState}`, 10, 40);
+      ctx.fillText(`myId  : ${myId || "null"}`, 10, 60);
+
+      if (myId && players[myId]) {
+        ctx.fillText(
+          `server: (${players[myId].x.toFixed(1)}, ${players[myId].y.toFixed(1)})`,
+          10,
+          80
+        );
+        ctx.fillText(
+          `logic : (${localPlayer.x.toFixed(1)}, ${localPlayer.y.toFixed(1)})`,
+          10,
+          100
+        );
+        ctx.fillText(
+          `render: (${localRenderPlayer.x.toFixed(1)}, ${localRenderPlayer.y.toFixed(1)})`,
+          10,
+          120
+        );
+        ctx.fillText(
+          `facing: (${localPlayer.facing.x.toFixed(2)}, ${localPlayer.facing.y.toFixed(2)})`,
+          10,
+          140
+        );
+        ctx.fillText(`acked : ${players[myId].lastProcessedInput}`, 10, 160);
+        ctx.fillText(`sent  : ${lastSentInputSeq}`, 10, 180);
+        ctx.fillText(`hp    : ${players[myId].hp}/${players[myId].maxHp}`, 10, 200);
+        ctx.fillText(`chat  : ${isChatting ? "typing" : "game"}`, 10, 220);
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      for (const id in renderPlayers) {
+        drawPlayer(id, renderPlayers[id]);
+      }
+
+      drawDebug();
+    }
+
+    function gameLoop(now) {
+      let frameTime = now - lastTime;
+      if (frameTime > 100) frameTime = 100;
+      lastTime = now;
+
+      accumulator += frameTime;
+
+      while (accumulator >= TICK_MS) {
+        simulateLocalTick();
+        accumulator -= TICK_MS;
+      }
+
+      updateRenderPlayers();
+      draw();
+
+      requestAnimationFrame(gameLoop);
+    }
 
     requestAnimationFrame(gameLoop);
-  }
+  </script>
 
-  requestAnimationFrame(gameLoop);
-</script>
+</body>
+
+</html>
