@@ -1,0 +1,17 @@
+const SERVER_PORT = 3000;
+
+const TICK_RATE = 20;
+const TICK_INTERVAL = 1000 / TICK_RATE;
+
+const WORLD_SIZE = 500;
+const PLAYER_SIZE = 20;
+const PLAYER_SPEED = 180;
+
+module.exports = {
+  SERVER_PORT,
+  TICK_RATE,
+  TICK_INTERVAL,
+  WORLD_SIZE,
+  PLAYER_SIZE,
+  PLAYER_SPEED,
+};
