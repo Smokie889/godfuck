@@ -3,6 +3,7 @@ const { createChatMessage } = require("../systems/chat-system");
 const { CLIENT_MESSAGE_TYPES, SERVER_MESSAGE_TYPES } = require("./protocol");
 
 function handleInputPacket(player, data) {
+  console.log("INPUT", player.id, data);
   player.inputState = {
     up: !!data.up,
     down: !!data.down,
