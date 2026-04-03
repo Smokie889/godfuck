@@ -133,6 +133,9 @@
     const chatMessages = [];
     const MAX_CHAT_LINES = 8;
 
+    // 攻擊鎖：按住 Space 不會一直送 attack
+    let attackHeld = false;
+
     function clamp(value, min, max) {
       return Math.max(min, Math.min(max, value));
     }
@@ -388,11 +391,17 @@
         return;
       }
 
-      if (e.repeat && e.code === "Space") return;
-
       if (e.code === "Space") {
         e.preventDefault();
-        sendAttack();
+
+        // OS 長按自動 repeat 防護
+        if (e.repeat) return;
+
+        // edge trigger：只有從沒按住 -> 按住 才送一次 attack
+        if (!attackHeld) {
+          attackHeld = true;
+          sendAttack();
+        }
         return;
       }
 
@@ -401,6 +410,12 @@
 
     document.addEventListener("keyup", (e) => {
       if (isChatting) {
+        return;
+      }
+
+      if (e.code === "Space") {
+        e.preventDefault();
+        attackHeld = false; // 放開後，下次才能再攻擊
         return;
       }
 

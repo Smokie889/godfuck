@@ -5,11 +5,11 @@ const CLIENT_MESSAGE_TYPES = {
 };
 
 const SERVER_MESSAGE_TYPES = {
-  INIT: "init",
+  WELCOME: "welcome",
   STATE: "state",
-  PLAYER_JOINED: "playerJoined",
-  REMOVE: "remove",
   CHAT: "chat",
+  PLAYER_JOINED: "player_joined",
+  PLAYER_LEFT: "player_left",
 };
 
 module.exports = {

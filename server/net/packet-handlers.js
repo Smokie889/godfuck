@@ -19,10 +19,7 @@ function handleAttackPacket(players, playerId) {
 
 function handleChatPacket({ player, data, wss, broadcast }) {
   const chatMessage = createChatMessage(player, data.text);
-
-  if (!chatMessage) {
-    return;
-  }
+  if (!chatMessage) return;
 
   broadcast(wss, {
     type: SERVER_MESSAGE_TYPES.CHAT,
@@ -40,9 +37,7 @@ function handlePacket({ message, playerId, players, ws, wss, broadcast }) {
   }
 
   const player = players[playerId];
-  if (!player) {
-    return;
-  }
+  if (!player) return;
 
   switch (data.type) {
     case CLIENT_MESSAGE_TYPES.INPUT:

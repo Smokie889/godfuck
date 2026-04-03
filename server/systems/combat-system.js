@@ -33,6 +33,7 @@ function handleAttack(players, attackerId) {
 
   const now = Date.now();
 
+  // server 雙保險：就算 client 出問題，也不會無限連砍
   if (now - attacker.lastAttackTime < ATTACK_COOLDOWN_MS) {
     return;
   }
@@ -55,16 +56,21 @@ function handleAttack(players, attackerId) {
 
     const toTargetX = targetCenterX - attackerCenterX;
     const toTargetY = targetCenterY - attackerCenterY;
-    const distance = Math.hypot(toTargetX, toTargetY);
 
+    const distance = Math.hypot(toTargetX, toTargetY);
     if (distance > ATTACK_RANGE || distance === 0) {
       continue;
     }
 
     const dirToTarget = normalize(toTargetX, toTargetY);
-    const alignment = dot(facing.x, facing.y, dirToTarget.x, dirToTarget.y);
+    const alignment = dot(
+      facing.x,
+      facing.y,
+      dirToTarget.x,
+      dirToTarget.y
+    );
 
-    if (alignment >= Math.cos(ATTACK_HALF_ANGLE_RAD)) {
+    if (alignment >= cosThreshold) {
       target.hp -= ATTACK_DAMAGE;
       target.hitFlashUntil = now + HIT_FLASH_MS;
 
