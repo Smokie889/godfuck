@@ -5,7 +5,6 @@ const CLIENT_MESSAGE_TYPES = {
 };
 
 const SERVER_MESSAGE_TYPES = {
-  INIT: "init",
   WELCOME: "welcome",
   STATE: "state",
   CHAT: "chat",
