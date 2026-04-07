@@ -1,4 +1,5 @@
 import { LOCAL_PREDICTION_SCALE, TICK_DELTA, WS_URL } from "../config.js";
+import { logOutgoing, logRuntime } from "../debug/debugUi.js";
 import { copyBulletState } from "../game/bullets.js";
 import { applyInputToPosition } from "../game/movement.js";
 import { copyPlayerState } from "../game/player.js";
@@ -9,20 +10,46 @@ export function createSocketClient(state, bounds, chatController, playerId) {
   connectUrl.searchParams.set("playerId", playerId);
 
   const ws = new WebSocket(connectUrl.toString());
+  state.network.wsReadyState = ws.readyState;
+  const PING_INTERVAL_MS = 1000;
+
+  function updatePing(rtt) {
+    const samples = state.network.pingSamples;
+    samples.push(rtt);
+
+    if (samples.length > 8) {
+      samples.shift();
+    }
+
+    state.network.pingMs = samples.reduce((sum, value) => sum + value, 0) / samples.length;
+  }
+
+  function sendPing() {
+    if (ws.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    const id = state.network.nextPingId++;
+    const sentAt = performance.now();
+    state.network.pendingPings[id] = sentAt;
+    state.network.lastPingSentAt = sentAt;
+
+    const packet = {
+      type: "ping",
+      id,
+    };
+
+    logOutgoing(state, "PING", { id });
+    ws.send(JSON.stringify(packet));
+  }
 
   function canSend() {
     return ws.readyState === WebSocket.OPEN && !!state.myId;
   }
 
   function sendCurrentInputState(inputSnapshot = state.inputState) {
-    console.log("[SEND INPUT] try", {
-      readyState: ws.readyState,
-      myId: state.myId,
-      inputState: { ...inputSnapshot },
-    });
-
     if (!canSend()) {
-      console.log("[SEND INPUT] blocked");
+      logRuntime(state, "INPUT_BLOCKED", { readyState: ws.readyState, myId: state.myId || "null" });
       return;
     }
 
@@ -37,19 +64,20 @@ export function createSocketClient(state, bounds, chatController, playerId) {
       right: inputSnapshot.right,
     };
 
-    console.log("[SEND INPUT] send", packet);
+    logOutgoing(state, "INPUT", {
+      seq: packet.seq,
+      up: +packet.up,
+      down: +packet.down,
+      left: +packet.left,
+      right: +packet.right,
+    });
     ws.send(JSON.stringify(packet));
     return state.lastSentInputSeq;
   }
 
   function sendShoot(aimX, aimY) {
-    console.log("[SEND SHOOT] try", {
-      readyState: ws.readyState,
-      myId: state.myId,
-    });
-
     if (!canSend()) {
-      console.log("[SEND SHOOT] blocked");
+      logRuntime(state, "SHOOT_BLOCKED", { readyState: ws.readyState, myId: state.myId || "null" });
       return;
     }
 
@@ -58,7 +86,10 @@ export function createSocketClient(state, bounds, chatController, playerId) {
       aimX,
       aimY,
     };
-    console.log("[SEND SHOOT] send", packet);
+    logOutgoing(state, "SHOOT", {
+      aimX,
+      aimY,
+    });
     ws.send(JSON.stringify(packet));
   }
 
@@ -74,17 +105,12 @@ export function createSocketClient(state, bounds, chatController, playerId) {
         y,
       })
     );
+    logOutgoing(state, "AIM", { x, y });
   }
 
   function sendChat(text) {
-    console.log("[SEND CHAT] try", {
-      readyState: ws.readyState,
-      myId: state.myId,
-      text,
-    });
-
     if (!canSend()) {
-      console.log("[SEND CHAT] blocked");
+      logRuntime(state, "CHAT_BLOCKED", { readyState: ws.readyState, myId: state.myId || "null" });
       return;
     }
 
@@ -93,30 +119,47 @@ export function createSocketClient(state, bounds, chatController, playerId) {
       text,
     };
 
-    console.log("[SEND CHAT] send", packet);
+    logOutgoing(state, "CHAT", { text });
     ws.send(JSON.stringify(packet));
   }
 
   ws.onopen = () => {
-    console.log("[WS] open");
+    state.network.wsReadyState = ws.readyState;
+    logRuntime(state, "WS_OPEN", { url: connectUrl.toString() });
+    sendPing();
   };
 
   ws.onerror = (err) => {
-    console.log("[WS] error", err);
+    state.network.wsReadyState = ws.readyState;
+    logRuntime(state, "WS_ERROR", { message: err?.message || "unknown" });
   };
 
   ws.onclose = (event) => {
-    console.log("[WS] close", event.code, event.reason);
+    state.network.wsReadyState = ws.readyState;
+    logRuntime(state, "WS_CLOSE", { code: event.code, reason: event.reason || "none" });
   };
 
   ws.onmessage = (event) => {
-    console.log("[WS] raw message", event.data);
-
+    state.network.wsReadyState = ws.readyState;
     const data = JSON.parse(event.data);
-    console.log("[WS] parsed type =", data.type, "full =", data);
+
+    if (data.type === "pong") {
+      const sentAt = state.network.pendingPings[data.id];
+      if (typeof sentAt === "number") {
+        delete state.network.pendingPings[data.id];
+        updatePing(performance.now() - sentAt);
+        logRuntime(state, "PONG", { id: data.id, ping: Math.round(state.network.pingMs) });
+      }
+      return;
+    }
 
     if (data.type === "init") {
       state.myId = data.id;
+      logRuntime(state, "INIT", {
+        myId: data.id,
+        players: Object.keys(data.players).length,
+        bullets: Object.keys(data.bullets || {}).length,
+      });
 
       for (const id in data.players) {
         state.players[id] = copyPlayerState(data.players[id]);
@@ -147,6 +190,7 @@ export function createSocketClient(state, bounds, chatController, playerId) {
     if (data.type === "playerJoined") {
       const player = copyPlayerState(data.player);
       state.players[player.id] = player;
+      logRuntime(state, "PLAYER_JOINED", { id: player.id });
 
       if (!state.renderPlayers[player.id]) {
         state.renderPlayers[player.id] = { x: player.x, y: player.y };
@@ -222,22 +266,26 @@ export function createSocketClient(state, bounds, chatController, playerId) {
 
     if (data.type === "bulletSpawn") {
       state.bullets[data.bullet.id] = copyBulletState(data.bullet);
+      logRuntime(state, "BULLET_SPAWN", { id: data.bullet.id, ownerId: data.bullet.ownerId });
       return;
     }
 
     if (data.type === "bulletRemove") {
       delete state.bullets[data.bulletId];
+      logRuntime(state, "BULLET_REMOVE", { id: data.bulletId });
       return;
     }
 
     if (data.type === "remove") {
       delete state.players[data.id];
       delete state.renderPlayers[data.id];
+      logRuntime(state, "PLAYER_REMOVE", { id: data.id });
       return;
     }
 
     if (data.type === "chat") {
       chatController.addChatLine(data.playerId, data.text);
+      logRuntime(state, "CHAT_RECV", { playerId: data.playerId, text: data.text });
       return;
     }
 
@@ -246,8 +294,13 @@ export function createSocketClient(state, bounds, chatController, playerId) {
         ...data,
         expiresAt: performance.now() + 120,
       });
+      logRuntime(state, "HIT", { attackerId: data.attackerId, targetId: data.targetId, damage: data.damage });
     }
   };
+
+  window.setInterval(() => {
+    sendPing();
+  }, PING_INTERVAL_MS);
 
   return {
     sendAim,

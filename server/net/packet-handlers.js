@@ -76,6 +76,15 @@ function handlePacket({ message, playerId, players, bullets, ws, wss, broadcast 
       });
       return;
 
+    case CLIENT_MESSAGE_TYPES.PING:
+      ws.send(
+        JSON.stringify({
+          type: SERVER_MESSAGE_TYPES.PONG,
+          id: data.id,
+        })
+      );
+      return;
+
     default:
       return;
   }

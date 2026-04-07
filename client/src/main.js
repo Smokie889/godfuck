@@ -8,6 +8,7 @@ import {
 } from "./game/shooting.js";
 import { updateLocalBullets } from "./game/bullets.js";
 import { createChatController } from "./chat/chatUi.js";
+import { createDebugUi } from "./debug/debugUi.js";
 import { simulateInputTick, updateRenderPlayers } from "./game/movement.js";
 import { createInputController } from "./input/inputController.js";
 import { createSocketClient } from "./network/socket.js";
@@ -20,6 +21,13 @@ const chatInput = document.getElementById("chatInput");
 const joinOverlay = document.getElementById("joinOverlay");
 const joinForm = document.getElementById("joinForm");
 const joinNameInput = document.getElementById("joinNameInput");
+const outgoingFixedDebug = document.getElementById("outgoingFixedDebug");
+const outgoingDebug = document.getElementById("outgoingDebug");
+const runtimeFixedDebug = document.getElementById("runtimeFixedDebug");
+const runtimeDebug = document.getElementById("runtimeDebug");
+const hudHealth = document.getElementById("hudHealth");
+const hudStamina = document.getElementById("hudStamina");
+const hudPing = document.getElementById("hudPing");
 
 canvas.width = WORLD_SIZE;
 canvas.height = WORLD_SIZE;
@@ -35,6 +43,7 @@ let gameStarted = false;
 let state = null;
 let socketClient = null;
 let renderer = null;
+let debugUi = null;
 
 function cloneInputState(inputState) {
   return {
@@ -106,6 +115,7 @@ function gameLoop(now) {
 
   updateRenderPlayers(state);
   renderer.draw();
+  debugUi.render();
   requestAnimationFrame(gameLoop);
 }
 
@@ -131,6 +141,15 @@ function startGame(requestedPlayerId) {
   const chatController = createChatController(state, chatBox, chatInput);
   socketClient = createSocketClient(state, bounds, chatController, requestedPlayerId);
   renderer = createRenderer(canvas, state, socketClient);
+  debugUi = createDebugUi(state, {
+    outgoingFixedDebug,
+    outgoingDebug,
+    runtimeFixedDebug,
+    runtimeDebug,
+    hudHealth,
+    hudStamina,
+    hudPing,
+  });
 
   createInputController(state, chatInput, {
     canvas,

@@ -3,6 +3,7 @@ const CLIENT_MESSAGE_TYPES = {
   AIM: "aim",
   SHOOT: "shoot",
   CHAT: "chat",
+  PING: "ping",
 };
 
 const SERVER_MESSAGE_TYPES = {
@@ -15,6 +16,7 @@ const SERVER_MESSAGE_TYPES = {
   HIT: "hit",
   PLAYER_JOINED: "playerJoined",
   REMOVE: "remove",
+  PONG: "pong",
 };
 
 module.exports = {

@@ -32,8 +32,6 @@ export function createInputController(state, chatInput, actions) {
   }
 
   document.addEventListener("keydown", (event) => {
-    console.log("[KEYDOWN]", event.key, event.code, "repeat=", event.repeat);
-
     if (event.key === "Enter") {
       event.preventDefault();
 
@@ -66,8 +64,6 @@ export function createInputController(state, chatInput, actions) {
   });
 
   document.addEventListener("keyup", (event) => {
-    console.log("[KEYUP]", event.key, event.code);
-
     if (state.isChatting) {
       return;
     }

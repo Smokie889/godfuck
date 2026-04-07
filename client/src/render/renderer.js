@@ -150,54 +150,6 @@ export function createRenderer(canvas, state, socketClient) {
     }
   }
 
-  function drawDebug() {
-    ctx.fillStyle = "#ddd";
-    ctx.font = "12px monospace";
-
-    ctx.fillText(
-      `input: U${+state.inputState.up} D${+state.inputState.down} L${+state.inputState.left} R${+state.inputState.right}`,
-      10,
-      20
-    );
-    ctx.fillText(`ws    : ${socketClient.ws.readyState}`, 10, 40);
-    ctx.fillText(`myId  : ${state.myId || "null"}`, 10, 60);
-
-    if (!state.myId || !state.players[state.myId]) {
-      return;
-    }
-
-    ctx.fillText(
-      `server: (${state.players[state.myId].x.toFixed(1)}, ${state.players[state.myId].y.toFixed(1)})`,
-      10,
-      80
-    );
-    ctx.fillText(
-      `logic : (${state.localPlayer.x.toFixed(1)}, ${state.localPlayer.y.toFixed(1)})`,
-      10,
-      100
-    );
-    ctx.fillText(
-      `render: (${state.localRenderPlayer.x.toFixed(1)}, ${state.localRenderPlayer.y.toFixed(1)})`,
-      10,
-      120
-    );
-    ctx.fillText(
-      `aim   : (${state.localPlayer.aimFacing.x.toFixed(2)}, ${state.localPlayer.aimFacing.y.toFixed(2)})`,
-      10,
-      140
-    );
-    ctx.fillText(
-      `move  : (${state.localPlayer.moveFacing.x.toFixed(2)}, ${state.localPlayer.moveFacing.y.toFixed(2)})`,
-      10,
-      160
-    );
-    ctx.fillText(`acked : ${state.players[state.myId].lastProcessedInput}`, 10, 180);
-    ctx.fillText(`sent  : ${state.lastSentInputSeq}`, 10, 200);
-    ctx.fillText(`hp    : ${state.players[state.myId].hp}/${state.players[state.myId].maxHp}`, 10, 220);
-    ctx.fillText(`chat  : ${state.isChatting ? "typing" : "game"}`, 10, 240);
-    ctx.fillText(`bullets: ${Object.keys(state.bullets).length}`, 10, 260);
-  }
-
   function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -212,7 +164,6 @@ export function createRenderer(canvas, state, socketClient) {
     drawChatBubbles();
     drawHitEffects();
     drawCrosshair();
-    drawDebug();
   }
 
   return { draw };

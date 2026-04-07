@@ -48,5 +48,21 @@ export function createGameState() {
       lastX: 0,
       lastY: -1,
     },
+    network: {
+      pingMs: 0,
+      pingSamples: [],
+      nextPingId: 1,
+      pendingPings: {},
+      lastPingSentAt: 0,
+      wsReadyState: 0,
+    },
+    hud: {
+      stamina: 100,
+      maxStamina: 100,
+    },
+    debug: {
+      outgoing: [],
+      runtime: [],
+    },
   };
 }

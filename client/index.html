@@ -22,7 +22,54 @@
       <button class="join-button" type="submit">Join Game</button>
     </form>
   </div>
-  <canvas id="game" width="800" height="800"></canvas>
+  <div class="game-shell">
+    <aside class="debug-panel debug-panel-left">
+      <div class="debug-panel-header">Outgoing Packets</div>
+      <div class="debug-section">
+        <div class="debug-section-title">Fixed Packets</div>
+        <div id="outgoingFixedDebug" class="debug-log debug-log-fixed"></div>
+      </div>
+      <div class="debug-section">
+        <div class="debug-section-title">Packet Events</div>
+        <div id="outgoingDebug" class="debug-log"></div>
+      </div>
+    </aside>
+
+    <div class="game-stage">
+      <canvas id="game" width="800" height="800"></canvas>
+
+      <div class="hud hud-top-left">
+        <div class="hud-card">
+          <div class="hud-label">Health</div>
+          <div id="hudHealth" class="hud-value">0 / 0</div>
+        </div>
+        <div class="hud-card">
+          <div class="hud-label">Stamina</div>
+          <div id="hudStamina" class="hud-value">100 / 100</div>
+        </div>
+      </div>
+
+      <div class="hud hud-top-right">
+        <div class="hud-card hud-card-compact">
+          <div class="hud-label">Ping</div>
+          <div id="hudPing" class="hud-value">-- ms</div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="debug-panel debug-panel-right">
+      <div class="debug-panel-header">Runtime Debug</div>
+      <div class="debug-section">
+        <div class="debug-section-title">Live State</div>
+        <div id="runtimeFixedDebug" class="debug-log debug-log-fixed"></div>
+      </div>
+      <div class="debug-section">
+        <div class="debug-section-title">Runtime Events</div>
+        <div id="runtimeDebug" class="debug-log"></div>
+      </div>
+    </aside>
+  </div>
+
   <div id="chatBox" class="chat-box"></div>
   <input id="chatInput" class="chat-input" />
 
