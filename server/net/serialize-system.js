@@ -1,27 +1,36 @@
-const { serializeCombatState } = require("../systems/combat-system");
-
-function serializePlayer(player, now) {
-  return {
+function serializePlayer(player, now, options = {}) {
+  const payload = {
     id: player.id,
     x: player.x,
     y: player.y,
     lastProcessedInput: player.lastProcessedInput,
-    facing: {
-      x: player.facing.x,
-      y: player.facing.y,
+    moveFacing: {
+      x: player.moveFacing.x,
+      y: player.moveFacing.y,
     },
     appearance: {
       chatBubbleStyle: player.appearance?.chatBubbleStyle || "default",
     },
-    ...serializeCombatState(player, now),
+    hp: player.hp,
+    maxHp: player.maxHp,
+    isHit: now < player.hitFlashUntil,
   };
+
+  if (options.includeAimFacing) {
+    payload.aimFacing = {
+      x: player.aimFacing.x,
+      y: player.aimFacing.y,
+    };
+  }
+
+  return payload;
 }
 
-function serializePlayers(players, now) {
+function serializePlayers(players, now, options = {}) {
   const result = {};
 
   for (const id in players) {
-    result[id] = serializePlayer(players[id], now);
+    result[id] = serializePlayer(players[id], now, options);
   }
 
   return result;

@@ -31,8 +31,8 @@ function applyInputToPlayer(player, inputState, deltaTime) {
 
   const dir = normalize(dx, dy);
 
-  player.facing.x = dir.x;
-  player.facing.y = dir.y;
+  player.moveFacing.x = dir.x;
+  player.moveFacing.y = dir.y;
 
   player.x += dir.x * PLAYER_SPEED * deltaTime;
   player.y += dir.y * PLAYER_SPEED * deltaTime;

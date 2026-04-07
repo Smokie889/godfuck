@@ -1,16 +1,20 @@
 const CLIENT_MESSAGE_TYPES = {
   INPUT: "input",
-  ATTACK: "attack",
+  AIM: "aim",
+  SHOOT: "shoot",
   CHAT: "chat",
 };
 
 const SERVER_MESSAGE_TYPES = {
   INIT: "init",
-  WELCOME: "welcome",
   STATE: "state",
+  AIM: "aim",
+  BULLET_SPAWN: "bulletSpawn",
+  BULLET_REMOVE: "bulletRemove",
   CHAT: "chat",
-  PLAYER_JOINED: "player_joined",
-  PLAYER_LEFT: "player_left",
+  HIT: "hit",
+  PLAYER_JOINED: "playerJoined",
+  REMOVE: "remove",
 };
 
 module.exports = {

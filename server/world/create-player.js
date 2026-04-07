@@ -1,9 +1,7 @@
-const { createCombatPlayerState } = require("../systems/combat-system");
 const { randomSpawn } = require("./spawn");
 
 function createPlayer(id) {
   const spawn = randomSpawn();
-  const combatState = createCombatPlayerState();
 
   return {
     id,
@@ -16,14 +14,21 @@ function createPlayer(id) {
       left: false,
       right: false,
     },
-    facing: {
+    moveFacing: {
+      x: 0,
+      y: -1,
+    },
+    aimFacing: {
       x: 0,
       y: -1,
     },
     appearance: {
       chatBubbleStyle: Math.random() > 0.5 ? "default" : "gold",
     },
-    ...combatState,
+    hp: 100,
+    maxHp: 100,
+    lastShotTime: 0,
+    hitFlashUntil: 0,
   };
 }
 

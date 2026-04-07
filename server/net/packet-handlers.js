@@ -1,4 +1,4 @@
-const { handleAttack } = require("../systems/combat-system");
+const { handleShoot } = require("../systems/bullet-system");
 const { createChatMessage } = require("../systems/chat-system");
 const { CLIENT_MESSAGE_TYPES, SERVER_MESSAGE_TYPES } = require("./protocol");
 
@@ -13,8 +13,17 @@ function handleInputPacket(player, data) {
   player.lastProcessedInput = data.seq || 0;
 }
 
-function handleAttackPacket(players, playerId) {
-  handleAttack(players, playerId);
+function handleAimPacket(player, data) {
+  const x = Number(data.x);
+  const y = Number(data.y);
+  const length = Math.hypot(x, y);
+
+  if (!Number.isFinite(x) || !Number.isFinite(y) || length === 0) {
+    return;
+  }
+
+  player.aimFacing.x = x / length;
+  player.aimFacing.y = y / length;
 }
 
 function handleChatPacket({ player, data, wss, broadcast }) {
@@ -27,7 +36,7 @@ function handleChatPacket({ player, data, wss, broadcast }) {
   });
 }
 
-function handlePacket({ message, playerId, players, ws, wss, broadcast }) {
+function handlePacket({ message, playerId, players, bullets, ws, wss, broadcast }) {
   let data;
 
   try {
@@ -44,8 +53,18 @@ function handlePacket({ message, playerId, players, ws, wss, broadcast }) {
       handleInputPacket(player, data);
       return;
 
-    case CLIENT_MESSAGE_TYPES.ATTACK:
-      handleAttackPacket(players, playerId);
+    case CLIENT_MESSAGE_TYPES.AIM:
+      handleAimPacket(player, data);
+      broadcast(wss, {
+        type: SERVER_MESSAGE_TYPES.AIM,
+        playerId,
+        x: player.aimFacing.x,
+        y: player.aimFacing.y,
+      });
+      return;
+
+    case CLIENT_MESSAGE_TYPES.SHOOT:
+      handleShoot({ players, bullets, playerId, data, wss, broadcast });
       return;
 
     case CLIENT_MESSAGE_TYPES.CHAT:
