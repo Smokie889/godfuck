@@ -217,12 +217,15 @@ export function createSocketClient(state, bounds, chatController, playerId) {
         }
 
         const previousHp = state.localMeta.previousHp;
+        const beforeReconcileX = state.localPlayer.x;
+        const beforeReconcileY = state.localPlayer.y;
         const serverAck = serverPlayer.lastProcessedInput || 0;
         state.localPlayer.x = serverPlayer.x;
         state.localPlayer.y = serverPlayer.y;
         state.localPlayer.moveFacing = { ...serverPlayer.moveFacing };
         state.localMeta.previousHp = serverPlayer.hp;
         state.pendingInputs = state.pendingInputs.filter((entry) => entry.seq > serverAck);
+        state.frameAnalysis.lastServerAck = serverAck;
 
         const respawned =
           serverPlayer.hp === serverPlayer.maxHp && previousHp < serverPlayer.hp;
@@ -241,6 +244,11 @@ export function createSocketClient(state, bounds, chatController, playerId) {
             bounds
           );
         }
+
+        const dx = beforeReconcileX - serverPlayer.x;
+        const dy = beforeReconcileY - serverPlayer.y;
+        state.frameAnalysis.correctionDistance = Math.hypot(dx, dy);
+        state.frameAnalysis.pendingCount = state.pendingInputs.length;
       }
 
       return;

@@ -60,6 +60,14 @@ export function createGameState() {
       stamina: 100,
       maxStamina: 100,
     },
+    frameAnalysis: {
+      frame: 0,
+      lastTickMs: 0,
+      lastInputSeq: 0,
+      lastServerAck: 0,
+      pendingCount: 0,
+      correctionDistance: 0,
+    },
     debug: {
       outgoing: [],
       runtime: [],

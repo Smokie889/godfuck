@@ -122,6 +122,14 @@ export function createDebugUi(state, elements) {
         text: `[INPUT] U${+state.inputState.up} D${+state.inputState.down} L${+state.inputState.left} R${+state.inputState.right} sent=${state.lastSentInputSeq}`,
       },
       {
+        id: "summary-frame",
+        text: `[FRAME] f=${state.frameAnalysis.frame} tick=${state.frameAnalysis.lastTickMs.toFixed(
+          1
+        )}ms lastSeq=${state.frameAnalysis.lastInputSeq} ack=${state.frameAnalysis.lastServerAck} pending=${state.frameAnalysis.pendingCount} corr=${state.frameAnalysis.correctionDistance.toFixed(
+          2
+        )}`,
+      },
+      {
         id: "summary-server",
         text: localServerPlayer
           ? `[SERVER] x=${localServerPlayer.x.toFixed(1)} y=${localServerPlayer.y.toFixed(

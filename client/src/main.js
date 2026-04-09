@@ -90,6 +90,9 @@ function gameLoop(now) {
   accumulator += frameTime;
 
   while (accumulator >= TICK_MS) {
+    state.frameAnalysis.frame += 1;
+    state.frameAnalysis.lastTickMs = TICK_MS;
+
     const inputSnapshot = cloneInputState(state.inputState);
     const inputSignature = getInputSignature(inputSnapshot);
     const shouldSendInput =
@@ -104,12 +107,14 @@ function gameLoop(now) {
           inputState: inputSnapshot,
         });
         state.localMeta.lastSentInputSignature = inputSignature;
+        state.frameAnalysis.lastInputSeq = seq;
       }
     }
 
     simulateInputTick(state, inputSnapshot, TICK_DELTA * LOCAL_PREDICTION_SCALE, bounds);
     updateSpread(state, TICK_DELTA);
     updateLocalBullets(state, TICK_DELTA, bounds.width);
+    state.frameAnalysis.pendingCount = state.pendingInputs.length;
     accumulator -= TICK_MS;
   }
 
