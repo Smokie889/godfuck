@@ -1,14 +1,10 @@
 const {
-  BULLET_DAMAGE,
-  BULLET_LENGTH,
-  BULLET_MAX_DISTANCE,
-  BULLET_RADIUS,
-  BULLET_SPEED,
   PLAYER_SIZE,
-  SHOOT_INTERVAL_MS,
   WORLD_SIZE,
 } = require("../config");
 const { SERVER_MESSAGE_TYPES } = require("../net/protocol");
+const { resetPlayerWeapon } = require("./weapon-drop-system");
+const { getWeaponDefinition } = require("./weapon-system");
 const { randomSpawn } = require("../world/spawn");
 
 let nextBulletId = 1;
@@ -29,6 +25,16 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+function rotateDirection(direction, radians) {
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+
+  return {
+    x: direction.x * cos - direction.y * sin,
+    y: direction.x * sin + direction.y * cos,
+  };
+}
+
 function respawnPlayer(player) {
   const spawn = randomSpawn();
   player.x = spawn.x;
@@ -37,20 +43,61 @@ function respawnPlayer(player) {
   player.hitFlashUntil = 0;
   player.dashTimeRemaining = 0;
   player.dashCooldownRemaining = 0;
+  resetPlayerWeapon(player);
 }
 
-function createBullet(ownerId, player, direction) {
+function getAlivePlayers(players) {
+  return Object.values(players).filter((player) => !player.isEliminated);
+}
+
+function handlePlayerElimination({ hitTarget, players, room, roomId, wss, broadcast }) {
+  hitTarget.livesRemaining = Math.max(0, (hitTarget.livesRemaining || 0) - 1);
+
+  if (hitTarget.livesRemaining > 0) {
+    respawnPlayer(hitTarget);
+    return;
+  }
+
+  hitTarget.isEliminated = true;
+  hitTarget.hp = 0;
+  hitTarget.hitFlashUntil = 0;
+  hitTarget.dashTimeRemaining = 0;
+  hitTarget.dashCooldownRemaining = 0;
+
+  const alivePlayers = getAlivePlayers(players);
+
+  if (alivePlayers.length <= 1) {
+    const winner = alivePlayers[0] || null;
+    room.status = "waiting";
+    room.gameStartAt = null;
+
+    for (const member of Object.values(room.members || {})) {
+      member.isReady = false;
+    }
+
+    broadcast(wss, roomId, {
+      type: SERVER_MESSAGE_TYPES.MATCH_OVER,
+      winnerId: winner?.id || null,
+      winnerDisplayName: winner?.displayName || null,
+    });
+  }
+}
+
+function createBullet(ownerId, player, direction, weapon) {
   const now = Date.now();
   return {
     id: `b${nextBulletId++}`,
     ownerId,
+    weaponId: weapon.id,
     x: player.x + PLAYER_SIZE / 2,
     y: player.y + PLAYER_SIZE / 2,
     dirX: direction.x,
     dirY: direction.y,
-    speed: BULLET_SPEED,
-    length: BULLET_LENGTH,
-    radius: BULLET_RADIUS,
+    speed: weapon.bullet.speed,
+    length: weapon.bullet.length,
+    radius: weapon.bullet.radius,
+    damage: weapon.bullet.damage,
+    maxDistance: weapon.bullet.maxDistance,
     distanceTravelled: 0,
     spawnedAt: now,
   };
@@ -60,6 +107,7 @@ function serializeBullet(bullet) {
   return {
     id: bullet.id,
     ownerId: bullet.ownerId,
+    weaponId: bullet.weaponId,
     x: bullet.x,
     y: bullet.y,
     dirX: bullet.dirX,
@@ -67,18 +115,21 @@ function serializeBullet(bullet) {
     length: bullet.length,
     speed: bullet.speed,
     radius: bullet.radius,
-    maxDistance: BULLET_MAX_DISTANCE,
+    maxDistance: bullet.maxDistance,
+    damage: bullet.damage,
     distanceTravelled: bullet.distanceTravelled,
     spawnedAt: bullet.spawnedAt,
   };
 }
 
-function handleShoot({ players, bullets, playerId, data, wss, broadcast }) {
+function handleShoot({ players, bullets, playerId, data, roomId, wss, broadcast }) {
   const player = players[playerId];
   if (!player) return;
+  if (player.isEliminated) return;
+  const weapon = getWeaponDefinition(player.currentWeaponId);
 
   const now = Date.now();
-  if (now - player.lastShotTime < SHOOT_INTERVAL_MS) {
+  if (now - player.lastShotTime < weapon.fireIntervalMs) {
     return;
   }
 
@@ -93,13 +144,25 @@ function handleShoot({ players, bullets, playerId, data, wss, broadcast }) {
   player.aimFacing.x = direction.x;
   player.aimFacing.y = direction.y;
 
-  const bullet = createBullet(playerId, player, direction);
-  bullets[bullet.id] = bullet;
+  const pelletCount = Math.max(1, weapon.pelletCount || 1);
+  const spreadRadians = ((weapon.pelletSpreadDeg || 0) * Math.PI) / 180;
+  const spawnedBullets = [];
 
-  broadcast(wss, {
-    type: SERVER_MESSAGE_TYPES.BULLET_SPAWN,
-    bullet: serializeBullet(bullet),
-  });
+  for (let index = 0; index < pelletCount; index += 1) {
+    const spreadOffset =
+      pelletCount === 1 ? 0 : (Math.random() - 0.5) * spreadRadians;
+    const pelletDirection = rotateDirection(direction, spreadOffset);
+    const bullet = createBullet(playerId, player, pelletDirection, weapon);
+    bullets[bullet.id] = bullet;
+    spawnedBullets.push(bullet);
+  }
+
+  for (const bullet of spawnedBullets) {
+    broadcast(wss, roomId, {
+      type: SERVER_MESSAGE_TYPES.BULLET_SPAWN,
+      bullet: serializeBullet(bullet),
+    });
+  }
 }
 
 function circleIntersectsPlayer(bullet, player) {
@@ -167,12 +230,12 @@ function segmentIntersectsExpandedRect(startX, startY, endX, endY, rect, padding
   return tMin;
 }
 
-function updateBullets({ bullets, players, deltaTime, wss, broadcast }) {
+function updateBullets({ bullets, players, room, deltaTime, roomId, wss, broadcast }) {
   const now = Date.now();
 
   for (const id in bullets) {
     const bullet = bullets[id];
-    const remainingDistance = Math.max(0, BULLET_MAX_DISTANCE - bullet.distanceTravelled);
+    const remainingDistance = Math.max(0, bullet.maxDistance - bullet.distanceTravelled);
     const intendedDistance = bullet.speed * deltaTime;
     const stepDistance = Math.min(intendedDistance, remainingDistance);
     const startX = bullet.x;
@@ -214,23 +277,30 @@ function updateBullets({ bullets, players, deltaTime, wss, broadcast }) {
         bullet.y = endY;
       }
 
-      hitTarget.hp -= BULLET_DAMAGE;
+      hitTarget.hp -= bullet.damage;
       hitTarget.hitFlashUntil = now + 150;
 
-      broadcast(wss, {
+      broadcast(wss, roomId, {
         type: SERVER_MESSAGE_TYPES.HIT,
         attackerId: bullet.ownerId,
         targetId: hitTarget.id,
-        damage: BULLET_DAMAGE,
+        damage: bullet.damage,
         x: bullet.x,
         y: bullet.y,
       });
 
       if (hitTarget.hp <= 0) {
-        respawnPlayer(hitTarget);
+        handlePlayerElimination({
+          hitTarget,
+          players,
+          room,
+          roomId,
+          wss,
+          broadcast,
+        });
       }
 
-      broadcast(wss, {
+      broadcast(wss, roomId, {
         type: SERVER_MESSAGE_TYPES.BULLET_REMOVE,
         bulletId: bullet.id,
       });
@@ -243,11 +313,11 @@ function updateBullets({ bullets, players, deltaTime, wss, broadcast }) {
       bullet.y < 0 ||
       bullet.x > WORLD_SIZE ||
       bullet.y > WORLD_SIZE ||
-      bullet.distanceTravelled >= BULLET_MAX_DISTANCE ||
+      bullet.distanceTravelled >= bullet.maxDistance ||
       stepDistance <= 0;
 
     if (outsideWorld) {
-      broadcast(wss, {
+      broadcast(wss, roomId, {
         type: SERVER_MESSAGE_TYPES.BULLET_REMOVE,
         bulletId: bullet.id,
       });

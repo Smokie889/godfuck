@@ -16,14 +16,28 @@ import { resetSpread } from "../game/shooting.js";
 // 1. 對 server 發送輸入/射擊/聊天
 // 2. 接收各種 patch/event
 // 3. 把同步結果寫回前端 state
-export function createSocketClient(state, bounds, chatController, playerId) {
+export function createSocketClient(state, bounds, chatController, playerId, roomId, userId, displayName) {
   const connectUrl = new URL(WS_URL);
   connectUrl.searchParams.set("playerId", playerId);
+  connectUrl.searchParams.set("roomId", roomId);
+  connectUrl.searchParams.set("userId", userId || playerId);
+  connectUrl.searchParams.set("displayName", displayName || playerId);
 
   const ws = new WebSocket(connectUrl.toString());
   state.network.wsReadyState = ws.readyState;
   // 固定 ping 間隔，用來估算目前網路延遲。
   const PING_INTERVAL_MS = 1000;
+
+  function syncLocalWeaponId(nextWeaponId) {
+    if (!nextWeaponId) {
+      return;
+    }
+
+    if (state.localPlayer.currentWeaponId !== nextWeaponId) {
+      state.localPlayer.currentWeaponId = nextWeaponId;
+      resetSpread(state);
+    }
+  }
 
   function updatePing(rtt) {
     const samples = state.network.pingSamples;
@@ -160,6 +174,30 @@ export function createSocketClient(state, bounds, chatController, playerId) {
     ws.send(JSON.stringify(packet));
   }
 
+  function sendPickupWeapon() {
+    if (!canSend()) {
+      return;
+    }
+
+    ws.send(
+      JSON.stringify({
+        type: "pickupWeapon",
+      })
+    );
+  }
+
+  function sendDropWeapon() {
+    if (!canSend()) {
+      return;
+    }
+
+    ws.send(
+      JSON.stringify({
+        type: "dropWeapon",
+      })
+    );
+  }
+
   function sendAim(x, y) {
     if (!canSend()) {
       return;
@@ -240,9 +278,12 @@ export function createSocketClient(state, bounds, chatController, playerId) {
         state.bullets[id] = copyBulletState(data.bullets[id]);
       }
 
+      state.weaponDrops = { ...(data.weaponDrops || {}) };
+
       if (state.players[state.myId]) {
         state.localPlayer.x = state.players[state.myId].x;
         state.localPlayer.y = state.players[state.myId].y;
+        syncLocalWeaponId(state.players[state.myId].currentWeaponId);
         state.localPlayer.moveFacing = { ...state.players[state.myId].moveFacing };
         state.localPlayer.aimFacing = { ...state.players[state.myId].aimFacing };
         state.localPlayer.dashTimeRemaining = state.players[state.myId].dashTimeRemaining || 0;
@@ -297,6 +338,7 @@ export function createSocketClient(state, bounds, chatController, playerId) {
         const serverAck = serverPlayer.lastProcessedInput || 0;
         state.localPlayer.x = serverPlayer.x;
         state.localPlayer.y = serverPlayer.y;
+        syncLocalWeaponId(serverPlayer.currentWeaponId);
         state.localPlayer.moveFacing = { ...serverPlayer.moveFacing };
         state.localPlayer.dashTimeRemaining = serverPlayer.dashTimeRemaining || 0;
         state.localPlayer.dashCooldownRemaining =
@@ -334,6 +376,7 @@ export function createSocketClient(state, bounds, chatController, playerId) {
 
         const previousHp = state.localMeta.previousHp;
         state.localMeta.previousHp = serverPlayer.hp;
+        syncLocalWeaponId(serverPlayer.currentWeaponId);
 
         const respawned =
           serverPlayer.hp === serverPlayer.maxHp && previousHp < serverPlayer.hp;
@@ -377,6 +420,23 @@ export function createSocketClient(state, bounds, chatController, playerId) {
       return;
     }
 
+    if (data.type === "matchOver") {
+      state.match.isOver = true;
+      state.match.winnerId = data.winnerId || null;
+      state.match.winnerDisplayName = data.winnerDisplayName || null;
+      return;
+    }
+
+    if (data.type === "weaponDropSpawn") {
+      state.weaponDrops[data.drop.id] = { ...data.drop };
+      return;
+    }
+
+    if (data.type === "weaponDropRemove") {
+      delete state.weaponDrops[data.dropId];
+      return;
+    }
+
     if (data.type === "remove") {
       delete state.players[data.id];
       delete state.renderPlayers[data.id];
@@ -399,7 +459,7 @@ export function createSocketClient(state, bounds, chatController, playerId) {
     }
   };
 
-  window.setInterval(() => {
+  const pingTimer = window.setInterval(() => {
     sendPing();
   }, PING_INTERVAL_MS);
 
@@ -407,8 +467,16 @@ export function createSocketClient(state, bounds, chatController, playerId) {
     sendAim,
     sendDash,
     sendShoot,
+    sendPickupWeapon,
+    sendDropWeapon,
     sendChat,
     sendCurrentInputState,
     ws,
+    destroy() {
+      window.clearInterval(pingTimer);
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close(1000, "CLIENT_SESSION_END");
+      }
+    },
   };
 }

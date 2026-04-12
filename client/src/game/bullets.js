@@ -4,6 +4,7 @@ export function copyBulletState(source) {
   return {
     id: source.id,
     ownerId: source.ownerId,
+    weaponId: source.weaponId,
     x: source.x,
     y: source.y,
     dirX: source.dirX,
@@ -11,6 +12,7 @@ export function copyBulletState(source) {
     length: source.length,
     speed: source.speed,
     radius: source.radius || 3,
+    damage: source.damage || 0,
     maxDistance: source.maxDistance,
     distanceTravelled: source.distanceTravelled || 0,
     spawnedAt: source.spawnedAt || Date.now(),

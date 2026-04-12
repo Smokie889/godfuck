@@ -3,10 +3,16 @@
 export function copyPlayerState(source) {
   const result = {
     id: source.id,
+    userId: source.userId || source.id,
+    displayName: source.displayName || source.id,
     x: source.x,
     y: source.y,
     hp: source.hp,
     maxHp: source.maxHp,
+    livesRemaining: source.livesRemaining ?? 3,
+    maxLives: source.maxLives ?? 3,
+    isEliminated: !!source.isEliminated,
+    currentWeaponId: source.currentWeaponId || "pistol",
     lastProcessedInput: source.lastProcessedInput || 0,
     isHit: !!source.isHit,
     dashTimeRemaining: source.dashTimeRemaining ?? 0,
@@ -44,10 +50,16 @@ export function mergePlayerState(currentPlayer, nextState) {
   const mergedPlayer = {
     ...currentPlayer,
     id: nextState.id || currentPlayer.id,
+    userId: nextState.userId ?? currentPlayer.userId ?? currentPlayer.id,
+    displayName: nextState.displayName ?? currentPlayer.displayName ?? currentPlayer.id,
     x: nextState.x ?? currentPlayer.x,
     y: nextState.y ?? currentPlayer.y,
     hp: nextState.hp ?? currentPlayer.hp,
     maxHp: nextState.maxHp ?? currentPlayer.maxHp,
+    livesRemaining: nextState.livesRemaining ?? currentPlayer.livesRemaining ?? 3,
+    maxLives: nextState.maxLives ?? currentPlayer.maxLives ?? 3,
+    isEliminated: nextState.isEliminated ?? currentPlayer.isEliminated ?? false,
+    currentWeaponId: nextState.currentWeaponId ?? currentPlayer.currentWeaponId ?? "pistol",
     lastProcessedInput: nextState.lastProcessedInput ?? currentPlayer.lastProcessedInput ?? 0,
     isHit: nextState.isHit ?? currentPlayer.isHit ?? false,
     dashTimeRemaining: nextState.dashTimeRemaining ?? currentPlayer.dashTimeRemaining ?? 0,
@@ -79,6 +91,9 @@ export function mergeMovementState(currentPlayer, nextState) {
   return {
     ...currentPlayer,
     id: nextState.id || currentPlayer.id,
+    userId: nextState.userId ?? currentPlayer.userId ?? currentPlayer.id,
+    displayName: nextState.displayName ?? currentPlayer.displayName ?? currentPlayer.id,
+    currentWeaponId: nextState.currentWeaponId ?? currentPlayer.currentWeaponId ?? "pistol",
     x: nextState.x ?? currentPlayer.x,
     y: nextState.y ?? currentPlayer.y,
     lastProcessedInput: nextState.lastProcessedInput ?? currentPlayer.lastProcessedInput ?? 0,
@@ -103,8 +118,14 @@ export function mergeCombatState(currentPlayer, nextState) {
   return {
     ...currentPlayer,
     id: nextState.id || currentPlayer.id,
+    userId: nextState.userId ?? currentPlayer.userId ?? currentPlayer.id,
+    displayName: nextState.displayName ?? currentPlayer.displayName ?? currentPlayer.id,
+    currentWeaponId: nextState.currentWeaponId ?? currentPlayer.currentWeaponId ?? "pistol",
     hp: nextState.hp ?? currentPlayer.hp,
     maxHp: nextState.maxHp ?? currentPlayer.maxHp,
+    livesRemaining: nextState.livesRemaining ?? currentPlayer.livesRemaining ?? 3,
+    maxLives: nextState.maxLives ?? currentPlayer.maxLives ?? 3,
+    isEliminated: nextState.isEliminated ?? currentPlayer.isEliminated ?? false,
     isHit: nextState.isHit ?? currentPlayer.isHit ?? false,
   };
 }

@@ -1,8 +1,35 @@
 import { PLAYER_SIZE } from "../config.js";
 import { getSpreadRadius } from "../game/shooting.js";
+import { getWeaponDefinition } from "../game/weapons.js";
 
 export function createRenderer(canvas, state, socketClient) {
   const ctx = canvas.getContext("2d");
+
+  function findNearbyWeaponDrop() {
+    const player = state.localPlayer;
+    if (!player) {
+      return null;
+    }
+
+    const playerCenterX = player.x + PLAYER_SIZE / 2;
+    const playerCenterY = player.y + PLAYER_SIZE / 2;
+    let nearestDrop = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+
+    for (const dropId in state.weaponDrops) {
+      const drop = state.weaponDrops[dropId];
+      const distance = Math.hypot(drop.x - playerCenterX, drop.y - playerCenterY);
+
+      if (distance > 38 || distance >= nearestDistance) {
+        continue;
+      }
+
+      nearestDrop = drop;
+      nearestDistance = distance;
+    }
+
+    return nearestDrop;
+  }
 
   function hexToRgba(hex, alpha) {
     const normalized = hex.replace("#", "");
@@ -114,23 +141,154 @@ export function createRenderer(canvas, state, socketClient) {
     ctx.fillRect(x, y, barWidth * ratio, barHeight);
   }
 
+  function drawWeaponDrops() {
+    const now = performance.now();
+
+    for (const dropId in state.weaponDrops) {
+      const drop = state.weaponDrops[dropId];
+      const weapon = getWeaponDefinition(drop.weaponId);
+      const isShotgun = drop.weaponId === "shotgun";
+      const bobOffset = Math.sin(now / 240 + drop.x * 0.03) * 4;
+      const pulse = 0.55 + (Math.sin(now / 320 + drop.y * 0.025) + 1) * 0.18;
+      const glowRadius = 16 + pulse * 8;
+      const drawX = drop.x;
+      const drawY = drop.y + bobOffset;
+
+      ctx.save();
+      ctx.translate(drawX, drawY);
+      ctx.globalCompositeOperation = "lighter";
+
+      const glowGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, glowRadius);
+      glowGradient.addColorStop(
+        0,
+        isShotgun ? `rgba(255, 199, 92, ${0.18 + pulse * 0.14})` : `rgba(255, 255, 255, ${0.12 + pulse * 0.1})`
+      );
+      glowGradient.addColorStop(0.65, isShotgun ? "rgba(255, 181, 71, 0.1)" : "rgba(255, 255, 255, 0.08)");
+      glowGradient.addColorStop(1, "rgba(255, 255, 255, 0)");
+      ctx.fillStyle = glowGradient;
+      ctx.beginPath();
+      ctx.arc(0, 0, glowRadius, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = isShotgun ? "rgba(255, 181, 71, 0.18)" : "rgba(255, 255, 255, 0.15)";
+      ctx.beginPath();
+      ctx.arc(0, 0, 18, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = isShotgun
+        ? `rgba(255, 201, 111, ${0.34 + pulse * 0.24})`
+        : `rgba(255, 255, 255, ${0.28 + pulse * 0.2})`;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 15 + pulse * 3, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.strokeStyle = isShotgun ? "#ffb547" : "#ffffff";
+      ctx.lineWidth = 3;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(-12, 5);
+      ctx.lineTo(10, -1);
+      ctx.stroke();
+
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.92)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-2, -6);
+      ctx.lineTo(12, -2);
+      ctx.stroke();
+
+      ctx.strokeStyle = `rgba(255, 255, 255, ${0.18 + pulse * 0.12})`;
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(-16, -10 + ((now / 14 + drop.x) % 20));
+      ctx.lineTo(16, -18 + ((now / 14 + drop.x) % 20));
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(255, 255, 255, 0.78)";
+      ctx.font = "10px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(weapon.label.toUpperCase(), 0, 28);
+      ctx.restore();
+    }
+  }
+
   function drawFacingArrow(player, position) {
     const cx = position.x + PLAYER_SIZE / 2;
     const cy = position.y + PLAYER_SIZE / 2;
     const aimFacing = player.aimFacing || player.moveFacing || { x: 0, y: -1 };
     const fx = aimFacing.x;
     const fy = aimFacing.y;
+    const sideX = -fy;
+    const sideY = fx;
+    const weapon = getWeaponDefinition(player.currentWeaponId);
+    const isShotgun = weapon.id === "shotgun";
 
-    const arrowLen = 16;
-    const tipX = cx + fx * arrowLen;
-    const tipY = cy + fy * arrowLen;
+    const gripStart = isShotgun ? 2 : 4;
+    const barrelLength = isShotgun ? 19 : 14;
+    const stockLength = isShotgun ? 7 : 4;
+    const bodyWidth = isShotgun ? 2.8 : 1.8;
+
+    const gripX = cx + fx * gripStart;
+    const gripY = cy + fy * gripStart;
+    const muzzleX = cx + fx * barrelLength;
+    const muzzleY = cy + fy * barrelLength;
+    const stockX = cx - fx * stockLength;
+    const stockY = cy - fy * stockLength;
+
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+
+    if (isShotgun) {
+      ctx.strokeStyle = "rgba(82, 44, 18, 0.95)";
+      ctx.lineWidth = 4.2;
+      ctx.beginPath();
+      ctx.moveTo(stockX, stockY);
+      ctx.lineTo(gripX + sideX * 0.8, gripY + sideY * 0.8);
+      ctx.stroke();
+
+      ctx.strokeStyle = "#ffd27d";
+      ctx.lineWidth = 3.4;
+      ctx.beginPath();
+      ctx.moveTo(gripX, gripY);
+      ctx.lineTo(muzzleX, muzzleY);
+      ctx.stroke();
+
+      ctx.strokeStyle = "rgba(255, 247, 210, 0.92)";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(gripX + sideX * 0.4, gripY + sideY * 0.4);
+      ctx.lineTo(muzzleX + sideX * 0.4, muzzleY + sideY * 0.4);
+      ctx.stroke();
+
+      ctx.fillStyle = "#fff1cc";
+      ctx.beginPath();
+      ctx.arc(muzzleX, muzzleY, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.86)";
+    ctx.lineWidth = bodyWidth + 1.2;
+    ctx.beginPath();
+    ctx.moveTo(stockX, stockY);
+    ctx.lineTo(muzzleX, muzzleY);
+    ctx.stroke();
 
     ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 2;
+    ctx.lineWidth = bodyWidth;
     ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(tipX, tipY);
+    ctx.moveTo(gripX, gripY);
+    ctx.lineTo(muzzleX, muzzleY);
     ctx.stroke();
+
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(muzzleX, muzzleY, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
 
   function drawPlayer(id, position) {
@@ -139,6 +297,7 @@ export function createRenderer(canvas, state, socketClient) {
 
     let color = id === state.myId ? "#ff4d4f" : "#4da6ff";
     if (player.isHit) color = "#ffffff";
+    if (player.isEliminated) color = "#555555";
 
     ctx.fillStyle = color;
     ctx.fillRect(position.x, position.y, PLAYER_SIZE, PLAYER_SIZE);
@@ -148,7 +307,8 @@ export function createRenderer(canvas, state, socketClient) {
 
     ctx.fillStyle = "#fff";
     ctx.font = "12px sans-serif";
-    ctx.fillText(`${id} (${player.hp})`, position.x - 4, position.y - 18);
+    const playerLabel = player.displayName || id;
+    ctx.fillText(`${playerLabel} (${player.hp}) [${player.livesRemaining || 0}]`, position.x - 4, position.y - 18);
   }
 
   function drawChatBubbles() {
@@ -270,11 +430,37 @@ export function createRenderer(canvas, state, socketClient) {
     }
   }
 
+  function drawWeaponHud() {
+    const weapon = getWeaponDefinition(state.localPlayer.currentWeaponId);
+    const nearbyDrop = findNearbyWeaponDrop();
+
+    ctx.save();
+    ctx.textAlign = "right";
+    ctx.fillStyle = "rgba(255, 255, 255, 0.88)";
+    ctx.font = "700 13px sans-serif";
+    ctx.fillText(`WEAPON: ${weapon.label.toUpperCase()}`, canvas.width - 18, 42);
+
+    if (nearbyDrop) {
+      const pickupWeapon = getWeaponDefinition(nearbyDrop.weaponId);
+      ctx.textAlign = "center";
+      ctx.fillStyle = "rgba(255, 245, 210, 0.95)";
+      ctx.font = "700 14px sans-serif";
+      ctx.fillText(
+        `SPACE - PICK UP ${pickupWeapon.label.toUpperCase()}`,
+        canvas.width / 2,
+        canvas.height - 22
+      );
+    }
+
+    ctx.restore();
+  }
+
   function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     drawDashBursts();
     drawDashTrails();
+    drawWeaponDrops();
 
     for (const id in state.bullets) {
       drawBullet(state.bullets[id]);
@@ -287,6 +473,7 @@ export function createRenderer(canvas, state, socketClient) {
     drawChatBubbles();
     drawHitEffects();
     drawCrosshair();
+    drawWeaponHud();
   }
 
   return { draw };

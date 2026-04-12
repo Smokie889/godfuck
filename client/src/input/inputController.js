@@ -40,7 +40,7 @@ export function createInputController(state, chatInput, actions) {
     }
   }
 
-  document.addEventListener("keydown", (event) => {
+  const handleKeydown = (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
 
@@ -69,6 +69,18 @@ export function createInputController(state, chatInput, actions) {
       return;
     }
 
+    if (event.code === "Space") {
+      event.preventDefault();
+      actions.pickupWeapon();
+      return;
+    }
+
+    if (event.key === "`") {
+      event.preventDefault();
+      actions.dropWeapon();
+      return;
+    }
+
     if (event.key === "Shift") {
       if (!state.inputState.dashHeld) {
         state.inputState.dashHeld = true;
@@ -78,9 +90,9 @@ export function createInputController(state, chatInput, actions) {
     }
 
     updateKeyState(event.key, true);
-  });
+  };
 
-  document.addEventListener("keyup", (event) => {
+  const handleKeyup = (event) => {
     if (event.key === "Shift") {
       state.inputState.dashHeld = false;
       return;
@@ -91,23 +103,23 @@ export function createInputController(state, chatInput, actions) {
     }
 
     updateKeyState(event.key, false);
-  });
+  };
 
-  actions.canvas.addEventListener("mousemove", (event) => {
+  const handleMousemove = (event) => {
     const rect = actions.canvas.getBoundingClientRect();
     state.mouse.x = event.clientX - rect.left;
     state.mouse.y = event.clientY - rect.top;
-  });
+  };
 
-  actions.canvas.addEventListener("mouseenter", () => {
+  const handleMouseenter = () => {
     state.mouse.insideCanvas = true;
-  });
+  };
 
-  actions.canvas.addEventListener("mouseleave", () => {
+  const handleMouseleave = () => {
     state.mouse.insideCanvas = false;
-  });
+  };
 
-  actions.canvas.addEventListener("mousedown", (event) => {
+  const handleMousedown = (event) => {
     if (event.button !== 0 || state.isChatting) {
       return;
     }
@@ -115,22 +127,48 @@ export function createInputController(state, chatInput, actions) {
     event.preventDefault();
     state.mouse.leftDown = true;
     actions.handleShoot();
-  });
+  };
 
-  window.addEventListener("mouseup", (event) => {
+  const handleMouseup = (event) => {
     if (event.button !== 0) {
       return;
     }
 
     state.mouse.leftDown = false;
-  });
+  };
 
-  window.addEventListener("blur", () => {
+  const handleBlur = () => {
     stopAllMovementInput();
     state.mouse.leftDown = false;
-  });
+  };
 
-  actions.canvas.addEventListener("contextmenu", (event) => {
+  const handleContextmenu = (event) => {
     event.preventDefault();
-  });
+  };
+
+  document.addEventListener("keydown", handleKeydown);
+  document.addEventListener("keyup", handleKeyup);
+  actions.canvas.addEventListener("mousemove", handleMousemove);
+  actions.canvas.addEventListener("mouseenter", handleMouseenter);
+  actions.canvas.addEventListener("mouseleave", handleMouseleave);
+  actions.canvas.addEventListener("mousedown", handleMousedown);
+  window.addEventListener("mouseup", handleMouseup);
+  window.addEventListener("blur", handleBlur);
+  actions.canvas.addEventListener("contextmenu", handleContextmenu);
+
+  return {
+    destroy() {
+      stopAllMovementInput();
+      state.mouse.leftDown = false;
+      document.removeEventListener("keydown", handleKeydown);
+      document.removeEventListener("keyup", handleKeyup);
+      actions.canvas.removeEventListener("mousemove", handleMousemove);
+      actions.canvas.removeEventListener("mouseenter", handleMouseenter);
+      actions.canvas.removeEventListener("mouseleave", handleMouseleave);
+      actions.canvas.removeEventListener("mousedown", handleMousedown);
+      window.removeEventListener("mouseup", handleMouseup);
+      window.removeEventListener("blur", handleBlur);
+      actions.canvas.removeEventListener("contextmenu", handleContextmenu);
+    },
+  };
 }

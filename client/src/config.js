@@ -14,19 +14,12 @@ export const LOCAL_RENDER_LERP = 0.28;
 export const REMOTE_RENDER_LERP = 0.2;
 
 export const MAX_CHAT_LINES = 8;
-export const SHOOT_INTERVAL_MS = 180;
-export const BASE_SPREAD_RADIUS = 12;
-export const MAX_MOVEMENT_SPREAD = 26;
-export const MOVEMENT_SPREAD_GROWTH = 54;
-export const MOVEMENT_SPREAD_RECOVERY = 22;
-export const SHOT_SPREAD_BLOOM = 11;
-export const SHOT_SPREAD_RECOVERY = 16;
-export const MAX_TOTAL_SPREAD = 42;
 export const AIM_SEND_INTERVAL_MS = 50;
 export const CHAT_BUBBLE_LIFETIME_MS = 5000;
 
 const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
 const wsOverride = new URLSearchParams(window.location.search).get("ws");
+export const ROOM_ID = new URLSearchParams(window.location.search).get("room") || "lobby-01";
 
 function buildDefaultWsUrl() {
   return `${wsProtocol}//${window.location.hostname}:3000`;
@@ -45,3 +38,4 @@ function buildWsUrl() {
 }
 
 export const WS_URL = buildWsUrl();
+export const API_URL = WS_URL.replace(/^ws/, "http");

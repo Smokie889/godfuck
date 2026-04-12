@@ -1,22 +1,38 @@
 const WebSocket = require("ws");
-const { SERVER_PORT } = require("../config");
 
-function createSocketServer() {
-  const wss = new WebSocket.Server({ port: SERVER_PORT });
+function createSocketServer(server) {
+  const wss = new WebSocket.Server({ server });
   return wss;
 }
 
-function broadcast(wss, data) {
+function broadcastToMatchingClients(wss, predicate, data) {
   const message = JSON.stringify(data);
 
   for (const client of wss.clients) {
-    if (client.readyState === WebSocket.OPEN) {
+    if (client.readyState === WebSocket.OPEN && predicate(client)) {
       client.send(message);
     }
   }
 }
 
+function broadcastToRoom(wss, roomId, data) {
+  broadcastToMatchingClients(
+    wss,
+    (client) => client.roomId === roomId && client.channel === "game",
+    data
+  );
+}
+
+function broadcastToRoomLobby(wss, roomId, data) {
+  broadcastToMatchingClients(
+    wss,
+    (client) => client.roomId === roomId && client.channel === "roomLobby",
+    data
+  );
+}
+
 module.exports = {
   createSocketServer,
-  broadcast,
+  broadcastToRoomLobby,
+  broadcastToRoom,
 };

@@ -1,7 +1,5 @@
-const players = {};
-const bullets = {};
+const rooms = {};
 
 module.exports = {
-  players,
-  bullets,
+  rooms,
 };

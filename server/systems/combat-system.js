@@ -75,7 +75,14 @@ function handleAttack(players, attackerId) {
       target.hitFlashUntil = now + HIT_FLASH_MS;
 
       if (target.hp <= 0) {
-        applyRespawn(target);
+        target.livesRemaining = Math.max(0, (target.livesRemaining || 0) - 1);
+
+        if (target.livesRemaining > 0) {
+          applyRespawn(target);
+        } else {
+          target.hp = 0;
+          target.isEliminated = true;
+        }
       }
     }
   }

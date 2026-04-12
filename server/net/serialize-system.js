@@ -3,6 +3,8 @@
 function serializePlayer(player, now, options = {}) {
   const payload = {
     id: player.id,
+    userId: player.userId || player.id,
+    displayName: player.displayName || player.id,
     x: player.x,
     y: player.y,
     lastProcessedInput: player.lastProcessedInput,
@@ -15,6 +17,10 @@ function serializePlayer(player, now, options = {}) {
     },
     hp: player.hp,
     maxHp: player.maxHp,
+    livesRemaining: player.livesRemaining,
+    maxLives: player.maxLives,
+    isEliminated: !!player.isEliminated,
+    currentWeaponId: player.currentWeaponId,
     isHit: now < player.hitFlashUntil,
     dashTimeRemaining: player.dashTimeRemaining,
     dashCooldownRemaining: player.dashCooldownRemaining,
@@ -97,6 +103,9 @@ function buildCombatPatch(previousState, nextState) {
     return {
       hp: nextState.hp,
       maxHp: nextState.maxHp,
+      livesRemaining: nextState.livesRemaining,
+      maxLives: nextState.maxLives,
+      isEliminated: nextState.isEliminated,
       isHit: nextState.isHit,
     };
   }
@@ -105,6 +114,16 @@ function buildCombatPatch(previousState, nextState) {
 
   if (previousState.hp !== nextState.hp) patch.hp = nextState.hp;
   if (previousState.maxHp !== nextState.maxHp) patch.maxHp = nextState.maxHp;
+  if (previousState.livesRemaining !== nextState.livesRemaining) {
+    patch.livesRemaining = nextState.livesRemaining;
+  }
+  if (previousState.maxLives !== nextState.maxLives) patch.maxLives = nextState.maxLives;
+  if (previousState.isEliminated !== nextState.isEliminated) {
+    patch.isEliminated = nextState.isEliminated;
+  }
+  if (previousState.currentWeaponId !== nextState.currentWeaponId) {
+    patch.currentWeaponId = nextState.currentWeaponId;
+  }
   if (previousState.isHit !== nextState.isHit) patch.isHit = nextState.isHit;
 
   return patch;

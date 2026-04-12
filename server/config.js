@@ -14,14 +14,8 @@ const DASH_DURATION_MS = 165;
 const DASH_COOLDOWN_MS = 450;
 
 // 子彈相關常數。這些值會同時影響 server 權威判定與 client 的視覺模擬。
-const BULLET_SPEED = 1180;
-const BULLET_LENGTH = 42;
-const BULLET_RADIUS = 3;
-const BULLET_DAMAGE = 10;
-const BULLET_MAX_DISTANCE = 650;
 
 // server 端的最低開火間隔，用來阻止過快射擊。
-const SHOOT_INTERVAL_MS = 180;
 
 module.exports = {
   SERVER_PORT,
@@ -33,10 +27,4 @@ module.exports = {
   DASH_SPEED_MULTIPLIER,
   DASH_DURATION_MS,
   DASH_COOLDOWN_MS,
-  BULLET_SPEED,
-  BULLET_LENGTH,
-  BULLET_RADIUS,
-  BULLET_DAMAGE,
-  BULLET_MAX_DISTANCE,
-  SHOOT_INTERVAL_MS,
 };

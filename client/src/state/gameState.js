@@ -5,6 +5,7 @@ export function createGameState() {
     players: {},
     renderPlayers: {},
     bullets: {},
+    weaponDrops: {},
     hitEvents: [],
     dashTrails: [],
     dashBursts: [],
@@ -12,6 +13,7 @@ export function createGameState() {
     localPlayer: {
       x: 0,
       y: 0,
+      currentWeaponId: "pistol",
       moveFacing: { x: 0, y: -1 },
       aimFacing: { x: 0, y: -1 },
       dashTimeRemaining: 0,
@@ -64,6 +66,11 @@ export function createGameState() {
     },
     hud: {
       dashReadyRatio: 1,
+    },
+    match: {
+      isOver: false,
+      winnerId: null,
+      winnerDisplayName: null,
     },
     debug: {
       outgoing: [],

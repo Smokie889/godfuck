@@ -1,0 +1,10 @@
+{
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js"
+  },
+  "dependencies": {
+    "argon2": "^0.44.0",
+    "better-sqlite3": "^12.8.0"
+  }
+}

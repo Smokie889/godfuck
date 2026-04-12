@@ -1,15 +1,8 @@
 import {
   AIM_SEND_INTERVAL_MS,
-  BASE_SPREAD_RADIUS,
-  MAX_MOVEMENT_SPREAD,
-  MAX_TOTAL_SPREAD,
-  MOVEMENT_SPREAD_GROWTH,
-  MOVEMENT_SPREAD_RECOVERY,
   PLAYER_SIZE,
-  SHOT_SPREAD_BLOOM,
-  SHOT_SPREAD_RECOVERY,
-  SHOOT_INTERVAL_MS,
 } from "../config.js";
+import { getWeaponDefinition } from "./weapons.js";
 
 function randomSpreadOffset(radius) {
   const angle = Math.random() * Math.PI * 2;
@@ -28,24 +21,31 @@ function isMoving(inputState) {
 export function updateSpread(state, deltaTime) {
   const spread = state.spread;
   const moving = isMoving(state.inputState);
+  const weapon = getWeaponDefinition(state.localPlayer.currentWeaponId);
+  const spreadConfig = weapon.spread;
 
   if (moving) {
     spread.movement = Math.min(
-      MAX_MOVEMENT_SPREAD,
-      spread.movement + MOVEMENT_SPREAD_GROWTH * deltaTime
+      spreadConfig.maxMovement,
+      spread.movement + spreadConfig.movementGrowth * deltaTime
     );
   } else {
     spread.movement = Math.max(
       0,
-      spread.movement - MOVEMENT_SPREAD_RECOVERY * deltaTime
+      spread.movement - spreadConfig.movementRecovery * deltaTime
     );
   }
 
-  spread.shot = Math.max(0, spread.shot - SHOT_SPREAD_RECOVERY * deltaTime);
+  spread.shot = Math.max(0, spread.shot - spreadConfig.shotRecovery * deltaTime);
 }
 
 export function getSpreadRadius(state) {
-  return Math.min(MAX_TOTAL_SPREAD, BASE_SPREAD_RADIUS + state.spread.movement + state.spread.shot);
+  const weapon = getWeaponDefinition(state.localPlayer.currentWeaponId);
+  const spreadConfig = weapon.spread;
+  return Math.min(
+    spreadConfig.maxTotal,
+    spreadConfig.baseRadius + state.spread.movement + state.spread.shot
+  );
 }
 
 export function resetSpread(state) {
@@ -56,7 +56,10 @@ export function resetSpread(state) {
 
 export function buildShootIntent(state, canvas) {
   const now = performance.now();
-  if (now - state.spread.lastShotTime < SHOOT_INTERVAL_MS) {
+  const weapon = getWeaponDefinition(state.localPlayer.currentWeaponId);
+  const spreadConfig = weapon.spread;
+
+  if (now - state.spread.lastShotTime < weapon.fireIntervalMs) {
     return null;
   }
 
@@ -74,7 +77,7 @@ export function buildShootIntent(state, canvas) {
   }
 
   state.spread.lastShotTime = now;
-  state.spread.shot = Math.min(MAX_TOTAL_SPREAD, state.spread.shot + SHOT_SPREAD_BLOOM);
+  state.spread.shot = Math.min(spreadConfig.maxTotal, state.spread.shot + spreadConfig.shotBloom);
 
   return {
     aimX,

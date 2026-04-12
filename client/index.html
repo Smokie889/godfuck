@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8" />
@@ -10,20 +10,192 @@
 <body>
   <div id="joinOverlay" class="join-overlay">
     <form id="joinForm" class="join-card">
-      <h1 class="join-title">godfuck</h1>
-      <p class="join-subtitle">Enter your player ID to join the server.</p>
+      <div class="join-brand">
+        <h1 class="join-title">godfuck</h1>
+        <div class="join-crown" aria-hidden="true"></div>
+      </div>
+      <p class="join-subtitle">Log in or register to enter the lobby.</p>
+      <div class="auth-mode-toggle" role="tablist" aria-label="Authentication mode">
+        <button id="loginModeButton" class="auth-mode-button active" type="button">Log In</button>
+        <button id="registerModeButton" class="auth-mode-button" type="button">Register</button>
+      </div>
       <input
         id="joinNameInput"
         class="join-input"
         maxlength="16"
-        placeholder="player name"
+        placeholder="user_id"
         autocomplete="off"
         inputmode="latin"
       />
+      <input
+        id="joinPasswordInput"
+        class="join-input"
+        maxlength="72"
+        placeholder="password"
+        type="password"
+        autocomplete="off"
+      />
       <p class="join-hint">Use English letters, numbers, `_` or `-`.</p>
-      <button class="join-button" type="submit">Join Game</button>
+      <p id="authFeedback" class="join-feedback"></p>
+      <button id="joinSubmitButton" class="join-button" type="submit">Log In</button>
     </form>
   </div>
+
+  <div id="lobbyOverlay" class="lobby-overlay hidden">
+    <div class="lobby-shell">
+      <section class="lobby-panel lobby-profile-panel">
+        <button id="openProfileButton" class="lobby-profile-link" type="button">
+          <div id="lobbyAvatar" class="lobby-avatar">G</div>
+          <div class="lobby-profile-meta">
+            <div id="lobbyDisplayName" class="lobby-profile-name">Guest</div>
+            <div id="lobbyUserId" class="lobby-profile-id">@guest</div>
+            <div class="lobby-profile-action">Open profile settings</div>
+          </div>
+        </button>
+      </section>
+
+      <div class="lobby-grid">
+        <section class="lobby-panel lobby-room-panel">
+          <div class="lobby-section-head">
+            <div class="lobby-section-title">&#36938;&#25138;&#25151;&#38291;&#21015;&#34920;</div>
+            <button id="createRoomButton" class="lobby-button lobby-create-room-button" type="button">
+              &#21109;&#24314;&#25151;&#38291;
+            </button>
+          </div>
+          <div id="roomList" class="room-list"></div>
+        </section>
+
+        <section class="lobby-panel lobby-announcement-panel">
+          <div class="lobby-section-title">&#36938;&#25138;&#20844;&#20296;&#27404;</div>
+          <div id="announcementList" class="announcement-list"></div>
+        </section>
+      </div>
+
+      <section class="lobby-panel lobby-chat-panel">
+        <div class="lobby-section-title">&#22823;&#24307;&#32842;&#22825;</div>
+        <div id="lobbyChatMessages" class="lobby-chat-messages">
+          <div class="lobby-chat-line">System: lobby chat will be connected next.</div>
+          <div class="lobby-chat-line">Tip: choose a room from the list to enter the arena.</div>
+        </div>
+        <div class="lobby-chat-compose">
+          <input id="lobbyChatInput" class="lobby-input" placeholder="Lobby chat coming soon" disabled />
+          <button class="lobby-button" type="button" disabled>Send</button>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div id="profileModal" class="profile-modal hidden">
+    <div class="profile-dialog">
+      <div class="profile-dialog-head">
+        <div>
+          <div class="profile-dialog-title">&#20491;&#20154;&#36039;&#35338;</div>
+          <div class="profile-dialog-subtitle">&#20462;&#25913;&#36938;&#25138;&#20839;&#39023;&#31034;&#21517;&#31281;&#33287;&#24115;&#34399;&#36039;&#35338;</div>
+        </div>
+        <button id="closeProfileButton" class="profile-close-button" type="button">&times;</button>
+      </div>
+      <div class="profile-form-grid">
+        <label class="profile-label">
+          <span>USER ID</span>
+          <input id="profileUserIdInput" class="lobby-input" type="text" readonly />
+        </label>
+        <label class="profile-label">
+          <span>DISPLAY NAME</span>
+          <input id="displayNameInput" class="lobby-input" maxlength="20" placeholder="display_name" />
+        </label>
+      </div>
+      <div class="profile-dialog-actions">
+        <p id="profileFeedback" class="lobby-feedback"></p>
+        <button id="saveDisplayNameButton" class="lobby-button" type="button">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="createRoomModal" class="profile-modal hidden">
+    <div class="profile-dialog">
+      <div class="profile-dialog-head">
+        <div>
+          <div class="profile-dialog-title">&#21109;&#24314;&#25151;&#38291;</div>
+          <div class="profile-dialog-subtitle">
+            &#20808;&#24314;&#31435;&#36938;&#25138;&#25151;&#38291;&#22823;&#24307;&#65292;&#26410;&#20358;&#25105;&#20497;&#20877;&#25509; ready &#38283;&#23616;&#27969;&#31243;&#12290;
+          </div>
+        </div>
+        <button id="closeCreateRoomButton" class="profile-close-button" type="button">&times;</button>
+      </div>
+      <div class="profile-form-grid">
+        <label class="profile-label">
+          <span>ROOM NAME</span>
+          <input id="createRoomNameInput" class="lobby-input" maxlength="32" placeholder="room_name" />
+        </label>
+      </div>
+      <div class="profile-dialog-actions">
+        <p id="createRoomFeedback" class="lobby-feedback"></p>
+        <button id="confirmCreateRoomButton" class="lobby-button" type="button">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="roomLobbyOverlay" class="lobby-overlay hidden">
+    <div class="lobby-shell room-lobby-shell">
+      <section class="lobby-panel room-lobby-header">
+        <div id="roomLobbyName" class="room-lobby-name">ROOM NAME</div>
+        <button id="leaveRoomLobbyButton" class="lobby-button room-lobby-leave-button" type="button">
+          &#38626;&#38283;&#25151;&#38291;
+        </button>
+      </section>
+
+      <section class="lobby-panel room-lobby-members-panel">
+        <div class="room-lobby-members-head">
+          <div class="room-lobby-members-title">
+            &#25151;&#38291;&#20839;&#29509;&#23478;&#33287;&#29376;&#24907;
+          </div>
+          <div class="room-lobby-members-subtitle">
+            &#24050;&#28310;&#20633; / &#26410;&#28310;&#20633; / &#38538;&#29151;&#65288;&#30041;&#32066;&#26410;&#20358;&#29609;&#27861;&#25844;&#20805;&#65289;
+          </div>
+        </div>
+        <div id="roomLobbyMemberList" class="room-lobby-member-list"></div>
+        <div class="room-lobby-actions">
+          <button id="cancelReadyButton" class="lobby-button" type="button">
+            &#21462;&#28040;&#28310;&#20633;
+          </button>
+          <button id="readyRoomButton" class="lobby-button" type="button">
+            &#28310;&#20633;&#23436;&#25104;
+          </button>
+          <button id="startRoomGameButton" class="lobby-button" type="button">
+            &#38283;&#22987;&#36938;&#25138;
+          </button>
+        </div>
+      </section>
+
+      <section class="lobby-panel room-lobby-chat-panel">
+        <div class="room-lobby-chat-title">&#25151;&#38291;&#20839;&#32842;&#22825;&#20171;&#38754;</div>
+        <div id="roomLobbyChatMessages" class="lobby-chat-messages">
+          <div class="lobby-chat-line">Room chat will be connected after room sync is implemented.</div>
+          <div class="lobby-chat-line">Next step: host authority, ready sync, and hard-synced game start.</div>
+        </div>
+        <div class="lobby-chat-compose">
+          <input id="roomLobbyChatInput" class="lobby-input" placeholder="Room chat coming soon" disabled />
+          <button class="lobby-button" type="button" disabled>Send</button>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div id="gameStartOverlay" class="profile-modal hidden">
+    <div class="game-start-shell">
+      <div class="game-start-spinner" aria-hidden="true"></div>
+      <div id="gameStartCountdown" class="game-start-countdown">3</div>
+      <div id="gameStartMemberList" class="game-start-member-list"></div>
+    </div>
+  </div>
+
+  <div id="gameOverOverlay" class="profile-modal hidden">
+    <div class="profile-dialog game-start-dialog">
+      <div class="profile-dialog-title">Match Over</div>
+      <div id="gameOverMessage" class="profile-dialog-subtitle">Winner</div>
+    </div>
+  </div>
+
   <div class="game-shell">
     <div class="game-stage">
       <canvas id="game" width="800" height="800"></canvas>
