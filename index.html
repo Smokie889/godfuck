@@ -24,7 +24,32 @@
       <button class="join-button" type="submit">Join Game</button>
     </form>
   </div>
-  <canvas id="game" width="800" height="800"></canvas>
+  <div class="game-shell">
+    <div class="game-stage">
+      <canvas id="game" width="800" height="800"></canvas>
+
+      <div class="hud hud-top-left">
+        <div id="hudHealthRing" class="hud-meter" style="--fill: 1; --meter-color: #3ccf5a;">
+          <div class="hud-meter-core">
+            <div class="hud-meter-label">HP</div>
+            <div id="hudHealth" class="hud-meter-value">100</div>
+            <div id="hudHealthMeta" class="hud-meter-meta">100%</div>
+          </div>
+        </div>
+        <div id="hudStaminaRing" class="hud-meter" style="--fill: 1; --meter-color: #3ccf5a;">
+          <div class="hud-meter-core">
+            <div class="hud-meter-label">DASH</div>
+            <div id="hudStamina" class="hud-meter-value">OK</div>
+            <div id="hudStaminaMeta" class="hud-meter-meta">READY</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hud hud-top-right">
+        <div id="hudPing" class="hud-ping">PING: -- ms</div>
+      </div>
+    </div>
+  </div>
   <div id="chatBox" class="chat-box"></div>
   <input id="chatInput" class="chat-input" />
 

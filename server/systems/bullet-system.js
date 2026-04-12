@@ -34,7 +34,6 @@ function respawnPlayer(player) {
   player.x = spawn.x;
   player.y = spawn.y;
   player.hp = player.maxHp;
-  player.stamina = player.maxStamina;
   player.hitFlashUntil = 0;
   player.dashTimeRemaining = 0;
   player.dashCooldownRemaining = 0;
@@ -112,25 +111,125 @@ function circleIntersectsPlayer(bullet, player) {
   return dx * dx + dy * dy <= bullet.radius * bullet.radius;
 }
 
+function segmentIntersectsExpandedRect(startX, startY, endX, endY, rect, padding) {
+  const minX = rect.x - padding;
+  const minY = rect.y - padding;
+  const maxX = rect.x + PLAYER_SIZE + padding;
+  const maxY = rect.y + PLAYER_SIZE + padding;
+  const dx = endX - startX;
+  const dy = endY - startY;
+
+  let tMin = 0;
+  let tMax = 1;
+
+  if (dx === 0) {
+    if (startX < minX || startX > maxX) {
+      return null;
+    }
+  } else {
+    const invDx = 1 / dx;
+    let t1 = (minX - startX) * invDx;
+    let t2 = (maxX - startX) * invDx;
+
+    if (t1 > t2) {
+      [t1, t2] = [t2, t1];
+    }
+
+    tMin = Math.max(tMin, t1);
+    tMax = Math.min(tMax, t2);
+
+    if (tMin > tMax) {
+      return null;
+    }
+  }
+
+  if (dy === 0) {
+    if (startY < minY || startY > maxY) {
+      return null;
+    }
+  } else {
+    const invDy = 1 / dy;
+    let t1 = (minY - startY) * invDy;
+    let t2 = (maxY - startY) * invDy;
+
+    if (t1 > t2) {
+      [t1, t2] = [t2, t1];
+    }
+
+    tMin = Math.max(tMin, t1);
+    tMax = Math.min(tMax, t2);
+
+    if (tMin > tMax) {
+      return null;
+    }
+  }
+
+  return tMin;
+}
+
 function updateBullets({ bullets, players, deltaTime, wss, broadcast }) {
   const now = Date.now();
 
   for (const id in bullets) {
     const bullet = bullets[id];
-    const distance = bullet.speed * deltaTime;
+    const remainingDistance = Math.max(0, BULLET_MAX_DISTANCE - bullet.distanceTravelled);
+    const intendedDistance = bullet.speed * deltaTime;
+    const stepDistance = Math.min(intendedDistance, remainingDistance);
+    const startX = bullet.x;
+    const startY = bullet.y;
+    const endX = startX + bullet.dirX * stepDistance;
+    const endY = startY + bullet.dirY * stepDistance;
+    let hitTarget = null;
+    let hitT = Number.POSITIVE_INFINITY;
 
-    bullet.x += bullet.dirX * distance;
-    bullet.y += bullet.dirY * distance;
-    bullet.distanceTravelled += distance;
+    for (const playerId in players) {
+      if (playerId === bullet.ownerId) continue;
 
-    const outsideWorld =
-      bullet.x < 0 ||
-      bullet.y < 0 ||
-      bullet.x > WORLD_SIZE ||
-      bullet.y > WORLD_SIZE ||
-      bullet.distanceTravelled >= BULLET_MAX_DISTANCE;
+      const player = players[playerId];
+      const collisionT = segmentIntersectsExpandedRect(
+        startX,
+        startY,
+        endX,
+        endY,
+        player,
+        bullet.radius
+      );
 
-    if (outsideWorld) {
+      if (collisionT !== null && collisionT < hitT) {
+        hitTarget = player;
+        hitT = collisionT;
+      }
+    }
+
+    bullet.x = endX;
+    bullet.y = endY;
+    bullet.distanceTravelled += stepDistance;
+
+    if (hitTarget) {
+      bullet.x = startX + (endX - startX) * hitT;
+      bullet.y = startY + (endY - startY) * hitT;
+
+      if (!circleIntersectsPlayer(bullet, hitTarget)) {
+        bullet.x = endX;
+        bullet.y = endY;
+      }
+
+      hitTarget.hp -= BULLET_DAMAGE;
+      hitTarget.hitFlashUntil = now + 150;
+
+      broadcast(wss, {
+        type: SERVER_MESSAGE_TYPES.HIT,
+        attackerId: bullet.ownerId,
+        targetId: hitTarget.id,
+        damage: BULLET_DAMAGE,
+        x: bullet.x,
+        y: bullet.y,
+      });
+
+      if (hitTarget.hp <= 0) {
+        respawnPlayer(hitTarget);
+      }
+
       broadcast(wss, {
         type: SERVER_MESSAGE_TYPES.BULLET_REMOVE,
         bulletId: bullet.id,
@@ -139,43 +238,21 @@ function updateBullets({ bullets, players, deltaTime, wss, broadcast }) {
       continue;
     }
 
-    let hitTarget = null;
+    const outsideWorld =
+      bullet.x < 0 ||
+      bullet.y < 0 ||
+      bullet.x > WORLD_SIZE ||
+      bullet.y > WORLD_SIZE ||
+      bullet.distanceTravelled >= BULLET_MAX_DISTANCE ||
+      stepDistance <= 0;
 
-    for (const playerId in players) {
-      if (playerId === bullet.ownerId) continue;
-
-      const player = players[playerId];
-      if (circleIntersectsPlayer(bullet, player)) {
-        hitTarget = player;
-        break;
-      }
+    if (outsideWorld) {
+      broadcast(wss, {
+        type: SERVER_MESSAGE_TYPES.BULLET_REMOVE,
+        bulletId: bullet.id,
+      });
+      delete bullets[id];
     }
-
-    if (!hitTarget) {
-      continue;
-    }
-
-    hitTarget.hp -= BULLET_DAMAGE;
-    hitTarget.hitFlashUntil = now + 150;
-
-    broadcast(wss, {
-      type: SERVER_MESSAGE_TYPES.HIT,
-      attackerId: bullet.ownerId,
-      targetId: hitTarget.id,
-      damage: BULLET_DAMAGE,
-      x: bullet.x,
-      y: bullet.y,
-    });
-
-    if (hitTarget.hp <= 0) {
-      respawnPlayer(hitTarget);
-    }
-
-    broadcast(wss, {
-      type: SERVER_MESSAGE_TYPES.BULLET_REMOVE,
-      bulletId: bullet.id,
-    });
-    delete bullets[id];
   }
 }
 

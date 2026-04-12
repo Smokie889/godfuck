@@ -1,4 +1,3 @@
-const { STAMINA_MAX } = require("../config");
 const { randomSpawn } = require("./spawn");
 
 function createPlayer(id) {
@@ -28,8 +27,6 @@ function createPlayer(id) {
     },
     hp: 100,
     maxHp: 100,
-    stamina: STAMINA_MAX,
-    maxStamina: STAMINA_MAX,
     lastShotTime: 0,
     hitFlashUntil: 0,
     dashTimeRemaining: 0,

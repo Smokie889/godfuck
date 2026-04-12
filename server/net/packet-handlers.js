@@ -12,10 +12,6 @@ function handleInputPacket(player, data) {
   };
 
   player.lastProcessedInput = data.seq || 0;
-
-  if (data.dash) {
-    tryStartDash(player, player.inputState);
-  }
 }
 
 function handleAimPacket(player, data) {

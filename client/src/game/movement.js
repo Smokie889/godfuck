@@ -1,14 +1,11 @@
 import {
   DASH_COOLDOWN_MS,
   DASH_DURATION_MS,
-  DASH_MIN_STAMINA_REQUIRED,
   DASH_SPEED_MULTIPLIER,
-  DASH_STAMINA_COST,
   LOCAL_RENDER_LERP,
   PLAYER_SIZE,
   PLAYER_SPEED,
   REMOTE_RENDER_LERP,
-  STAMINA_RECOVERY_PER_SECOND,
 } from "../config.js";
 import { clamp, lerp, normalize } from "./math.js";
 
@@ -31,16 +28,8 @@ function getMovementDirection(inputState) {
   return normalize(dx, dy);
 }
 
-function tryStartLocalDash(player, inputState) {
-  if (!inputState.dash) {
-    return false;
-  }
-
+export function tryStartLocalDash(player, inputState) {
   if (player.dashTimeRemaining > 0 || player.dashCooldownRemaining > 0) {
-    return false;
-  }
-
-  if (player.stamina < DASH_MIN_STAMINA_REQUIRED) {
     return false;
   }
 
@@ -49,7 +38,6 @@ function tryStartLocalDash(player, inputState) {
     return false;
   }
 
-  player.stamina = Math.max(0, player.stamina - DASH_STAMINA_COST);
   player.dashTimeRemaining = DASH_DURATION_MS / 1000;
   player.dashCooldownRemaining = DASH_COOLDOWN_MS / 1000;
   player.dashFacing.x = dir.x;
@@ -62,20 +50,9 @@ function tryStartLocalDash(player, inputState) {
 function tickLocalDashState(player, deltaTime) {
   player.dashTimeRemaining = Math.max(0, player.dashTimeRemaining - deltaTime);
   player.dashCooldownRemaining = Math.max(0, player.dashCooldownRemaining - deltaTime);
-
-  if (player.dashTimeRemaining > 0) {
-    return;
-  }
-
-  player.stamina = Math.min(
-    player.maxStamina,
-    player.stamina + STAMINA_RECOVERY_PER_SECOND * deltaTime
-  );
 }
 
 function buildMovementDelta(player, inputState, deltaTime, facingHolder) {
-  tryStartLocalDash(player, inputState);
-
   if (player.dashTimeRemaining > 0) {
     if (facingHolder) {
       facingHolder.x = player.dashFacing.x;

@@ -1,10 +1,6 @@
 export const PLAYER_SIZE = 20;
 export const PLAYER_SPEED = 180;
 export const WORLD_SIZE = 800;
-export const STAMINA_MAX = 100;
-export const DASH_STAMINA_COST = 40;
-export const DASH_MIN_STAMINA_REQUIRED = 40;
-export const STAMINA_RECOVERY_PER_SECOND = 5;
 export const DASH_SPEED_MULTIPLIER = 2.9;
 export const DASH_DURATION_MS = 165;
 export const DASH_COOLDOWN_MS = 450;

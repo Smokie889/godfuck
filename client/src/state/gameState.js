@@ -6,12 +6,12 @@ export function createGameState() {
     renderPlayers: {},
     bullets: {},
     hitEvents: [],
+    dashTrails: [],
+    dashBursts: [],
     playerChatBubbles: {},
     localPlayer: {
       x: 0,
       y: 0,
-      stamina: 100,
-      maxStamina: 100,
       moveFacing: { x: 0, y: -1 },
       aimFacing: { x: 0, y: -1 },
       dashTimeRemaining: 0,
@@ -27,7 +27,6 @@ export function createGameState() {
       down: false,
       left: false,
       right: false,
-      dash: false,
       dashHeld: false,
     },
     pendingInputs: [],
@@ -64,8 +63,7 @@ export function createGameState() {
       wsReadyState: 0,
     },
     hud: {
-      stamina: 100,
-      maxStamina: 100,
+      dashReadyRatio: 1,
     },
     debug: {
       outgoing: [],

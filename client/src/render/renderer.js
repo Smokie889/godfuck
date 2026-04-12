@@ -4,6 +4,102 @@ import { getSpreadRadius } from "../game/shooting.js";
 export function createRenderer(canvas, state, socketClient) {
   const ctx = canvas.getContext("2d");
 
+  function hexToRgba(hex, alpha) {
+    const normalized = hex.replace("#", "");
+    const value = Number.parseInt(normalized, 16);
+    const r = (value >> 16) & 255;
+    const g = (value >> 8) & 255;
+    const b = value & 255;
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+
+  function drawDashBursts() {
+    const now = performance.now();
+    state.dashBursts = state.dashBursts.filter((burst) => burst.expiresAt > now);
+
+    for (const burst of state.dashBursts) {
+      const duration = burst.expiresAt - burst.spawnedAt;
+      const lifeRatio = Math.max(0, (burst.expiresAt - now) / duration);
+      const centerX = burst.x + PLAYER_SIZE / 2;
+      const centerY = burst.y + PLAYER_SIZE / 2;
+      const forwardOffset = 8 * (1 - lifeRatio);
+      const burstX = centerX + burst.dirX * forwardOffset;
+      const burstY = centerY + burst.dirY * forwardOffset;
+      const radius = 10 + (1 - lifeRatio) * 20;
+
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+
+      const gradient = ctx.createRadialGradient(
+        burstX,
+        burstY,
+        0,
+        burstX,
+        burstY,
+        radius
+      );
+      gradient.addColorStop(0, `rgba(255, 255, 255, ${0.42 * lifeRatio})`);
+      gradient.addColorStop(0.38, hexToRgba(burst.color, 0.28 * lifeRatio));
+      gradient.addColorStop(1, "rgba(255, 255, 255, 0)");
+
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(burstX, burstY, radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.strokeStyle = `rgba(255, 255, 255, ${0.22 * lifeRatio})`;
+      ctx.lineWidth = 2 + lifeRatio * 2;
+      ctx.beginPath();
+      ctx.arc(burstX, burstY, radius * 0.72, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+  }
+
+  function drawDashTrails() {
+    const now = performance.now();
+    state.dashTrails = state.dashTrails.filter((trail) => trail.expiresAt > now);
+
+    for (const trail of state.dashTrails) {
+      const lifeRatio = Math.max(0, (trail.expiresAt - now) / (trail.expiresAt - trail.spawnedAt));
+      const centerX = trail.x + PLAYER_SIZE / 2;
+      const centerY = trail.y + PLAYER_SIZE / 2;
+      const tailLength = 54 + (1 - lifeRatio) * 14;
+      const tailX = centerX - trail.dirX * tailLength;
+      const tailY = centerY - trail.dirY * tailLength;
+      const sideX = -trail.dirY;
+      const sideY = trail.dirX;
+      const width = 8 + lifeRatio * 10;
+
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+
+      const gradient = ctx.createLinearGradient(centerX, centerY, tailX, tailY);
+      gradient.addColorStop(0, `rgba(255, 255, 255, ${0.22 + lifeRatio * 0.22})`);
+      gradient.addColorStop(0.28, hexToRgba(trail.color, 0.26 + lifeRatio * 0.2));
+      gradient.addColorStop(1, "rgba(255, 255, 255, 0)");
+
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.moveTo(centerX + sideX * width, centerY + sideY * width);
+      ctx.lineTo(centerX - sideX * width, centerY - sideY * width);
+      ctx.lineTo(tailX - sideX * width * 0.34, tailY - sideY * width * 0.34);
+      ctx.lineTo(tailX + sideX * width * 0.34, tailY + sideY * width * 0.34);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = `rgba(255, 255, 255, ${0.16 + lifeRatio * 0.18})`;
+      ctx.lineWidth = 2 + lifeRatio * 2;
+      ctx.beginPath();
+      ctx.moveTo(centerX, centerY);
+      ctx.lineTo(tailX, tailY);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+  }
+
   function drawHpBar(player, position) {
     const barWidth = 26;
     const barHeight = 4;
@@ -101,18 +197,42 @@ export function createRenderer(canvas, state, socketClient) {
   }
 
   function drawBullet(bullet) {
-    const halfLength = (bullet.length || 18) / 2;
-    const startX = bullet.x - bullet.dirX * halfLength;
-    const startY = bullet.y - bullet.dirY * halfLength;
-    const endX = bullet.x + bullet.dirX * halfLength;
-    const endY = bullet.y + bullet.dirY * halfLength;
+    const trailLength = bullet.length || 42;
+    const tipX = bullet.x;
+    const tipY = bullet.y;
+    const tailX = tipX - bullet.dirX * trailLength;
+    const tailY = tipY - bullet.dirY * trailLength;
 
-    ctx.strokeStyle = "#fff";
-    ctx.lineWidth = 2;
+    ctx.save();
+    ctx.lineCap = "round";
+    ctx.globalCompositeOperation = "lighter";
+
+    const gradient = ctx.createLinearGradient(tipX, tipY, tailX, tailY);
+    gradient.addColorStop(0, "rgba(255, 255, 255, 0.98)");
+    gradient.addColorStop(0.2, "rgba(255, 244, 196, 0.92)");
+    gradient.addColorStop(0.65, "rgba(255, 255, 255, 0.46)");
+    gradient.addColorStop(1, "rgba(255, 255, 255, 0)");
+
+    ctx.strokeStyle = gradient;
+    ctx.lineWidth = 3.4;
     ctx.beginPath();
-    ctx.moveTo(startX, startY);
-    ctx.lineTo(endX, endY);
+    ctx.moveTo(tailX, tailY);
+    ctx.lineTo(tipX, tipY);
     ctx.stroke();
+
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.92)";
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(tailX, tailY);
+    ctx.lineTo(tipX, tipY);
+    ctx.stroke();
+
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(tipX, tipY, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
   }
 
   function drawCrosshair() {
@@ -152,6 +272,9 @@ export function createRenderer(canvas, state, socketClient) {
 
   function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    drawDashBursts();
+    drawDashTrails();
 
     for (const id in state.bullets) {
       drawBullet(state.bullets[id]);

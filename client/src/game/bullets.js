@@ -27,26 +27,78 @@ function circleIntersectsRect(bullet, rect) {
   return dx * dx + dy * dy <= radius * radius;
 }
 
+function segmentIntersectsExpandedRect(startX, startY, endX, endY, rect, padding) {
+  const minX = rect.x - padding;
+  const minY = rect.y - padding;
+  const maxX = rect.x + PLAYER_SIZE + padding;
+  const maxY = rect.y + PLAYER_SIZE + padding;
+  const dx = endX - startX;
+  const dy = endY - startY;
+
+  let tMin = 0;
+  let tMax = 1;
+
+  if (dx === 0) {
+    if (startX < minX || startX > maxX) {
+      return null;
+    }
+  } else {
+    const invDx = 1 / dx;
+    let t1 = (minX - startX) * invDx;
+    let t2 = (maxX - startX) * invDx;
+
+    if (t1 > t2) {
+      [t1, t2] = [t2, t1];
+    }
+
+    tMin = Math.max(tMin, t1);
+    tMax = Math.min(tMax, t2);
+
+    if (tMin > tMax) {
+      return null;
+    }
+  }
+
+  if (dy === 0) {
+    if (startY < minY || startY > maxY) {
+      return null;
+    }
+  } else {
+    const invDy = 1 / dy;
+    let t1 = (minY - startY) * invDy;
+    let t2 = (maxY - startY) * invDy;
+
+    if (t1 > t2) {
+      [t1, t2] = [t2, t1];
+    }
+
+    tMin = Math.max(tMin, t1);
+    tMax = Math.min(tMax, t2);
+
+    if (tMin > tMax) {
+      return null;
+    }
+  }
+
+  return tMin;
+}
+
 export function updateLocalBullets(state, deltaTime, worldSize) {
   for (const id in state.bullets) {
     const bullet = state.bullets[id];
-    const distance = bullet.speed * deltaTime;
+    const remainingDistance = Math.max(0, bullet.maxDistance - bullet.distanceTravelled);
+    const intendedDistance = bullet.speed * deltaTime;
+    const stepDistance = Math.min(intendedDistance, remainingDistance);
+    const startX = bullet.x;
+    const startY = bullet.y;
+    const endX = startX + bullet.dirX * stepDistance;
+    const endY = startY + bullet.dirY * stepDistance;
 
-    bullet.x += bullet.dirX * distance;
-    bullet.y += bullet.dirY * distance;
-    bullet.distanceTravelled += distance;
+    bullet.x = endX;
+    bullet.y = endY;
+    bullet.distanceTravelled += stepDistance;
 
-    const outsideWorld =
-      bullet.x < 0 ||
-      bullet.y < 0 ||
-      bullet.x > worldSize ||
-      bullet.y > worldSize ||
-      bullet.distanceTravelled >= bullet.maxDistance;
-
-    if (outsideWorld) {
-      delete state.bullets[id];
-      continue;
-    }
+    let removeBullet = false;
 
     for (const playerId in state.renderPlayers) {
       if (playerId === bullet.ownerId) {
@@ -58,10 +110,37 @@ export function updateLocalBullets(state, deltaTime, worldSize) {
         continue;
       }
 
-      if (circleIntersectsRect(bullet, playerPosition)) {
-        delete state.bullets[id];
+      const collisionT = segmentIntersectsExpandedRect(
+        startX,
+        startY,
+        endX,
+        endY,
+        playerPosition,
+        bullet.radius || 3
+      );
+
+      if (collisionT !== null) {
+        bullet.x = startX + (endX - startX) * collisionT;
+        bullet.y = startY + (endY - startY) * collisionT;
+        if (!circleIntersectsRect(bullet, playerPosition)) {
+          bullet.x = endX;
+          bullet.y = endY;
+        }
+        removeBullet = true;
         break;
       }
+    }
+
+    const outsideWorld =
+      bullet.x < 0 ||
+      bullet.y < 0 ||
+      bullet.x > worldSize ||
+      bullet.y > worldSize ||
+      bullet.distanceTravelled >= bullet.maxDistance ||
+      stepDistance <= 0;
+
+    if (removeBullet || outsideWorld) {
+      delete state.bullets[id];
     }
   }
 }

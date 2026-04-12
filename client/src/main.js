@@ -25,8 +25,12 @@ const chatInput = document.getElementById("chatInput");
 const joinOverlay = document.getElementById("joinOverlay");
 const joinForm = document.getElementById("joinForm");
 const joinNameInput = document.getElementById("joinNameInput");
+const hudHealthRing = document.getElementById("hudHealthRing");
 const hudHealth = document.getElementById("hudHealth");
+const hudHealthMeta = document.getElementById("hudHealthMeta");
+const hudStaminaRing = document.getElementById("hudStaminaRing");
 const hudStamina = document.getElementById("hudStamina");
+const hudStaminaMeta = document.getElementById("hudStaminaMeta");
 const hudPing = document.getElementById("hudPing");
 
 canvas.width = WORLD_SIZE;
@@ -53,7 +57,6 @@ function cloneInputState(inputState) {
     down: inputState.down,
     left: inputState.left,
     right: inputState.right,
-    dash: inputState.dash,
   };
 }
 
@@ -99,7 +102,6 @@ function gameLoop(now) {
     const inputSnapshot = cloneInputState(state.inputState);
     const inputSignature = getInputSignature(inputSnapshot);
     const shouldSendInput =
-      inputSnapshot.dash ||
       hasMovementInput(inputSnapshot) ||
       inputSignature !== state.localMeta.lastSentInputSignature;
 
@@ -153,8 +155,12 @@ function startGame(requestedPlayerId) {
   socketClient = createSocketClient(state, bounds, chatController, requestedPlayerId);
   renderer = createRenderer(canvas, state, socketClient);
   hudUi = createHudUi(state, {
+    hudHealthRing,
     hudHealth,
+    hudHealthMeta,
+    hudStaminaRing,
     hudStamina,
+    hudStaminaMeta,
     hudPing,
   });
   debugBridge = createDebugBridge();
@@ -172,6 +178,7 @@ function startGame(requestedPlayerId) {
       socketClient.sendShoot(intent.aimX, intent.aimY);
     },
     sendChat: socketClient.sendChat,
+    sendDash: socketClient.sendDash,
     sendCurrentInputState: socketClient.sendCurrentInputState,
   });
 

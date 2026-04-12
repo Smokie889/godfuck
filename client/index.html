@@ -29,21 +29,24 @@
       <canvas id="game" width="800" height="800"></canvas>
 
       <div class="hud hud-top-left">
-        <div class="hud-card">
-          <div class="hud-label">Health</div>
-          <div id="hudHealth" class="hud-value">0 / 0</div>
+        <div id="hudHealthRing" class="hud-meter" style="--fill: 1; --meter-color: #3ccf5a;">
+          <div class="hud-meter-core">
+            <div class="hud-meter-label">HP</div>
+            <div id="hudHealth" class="hud-meter-value">100</div>
+            <div id="hudHealthMeta" class="hud-meter-meta">100%</div>
+          </div>
         </div>
-        <div class="hud-card">
-          <div class="hud-label">Stamina</div>
-          <div id="hudStamina" class="hud-value">100 / 100</div>
+        <div id="hudStaminaRing" class="hud-meter" style="--fill: 1; --meter-color: #3ccf5a;">
+          <div class="hud-meter-core">
+            <div class="hud-meter-label">DASH</div>
+            <div id="hudStamina" class="hud-meter-value">OK</div>
+            <div id="hudStaminaMeta" class="hud-meter-meta">READY</div>
+          </div>
         </div>
       </div>
 
       <div class="hud hud-top-right">
-        <div class="hud-card hud-card-compact">
-          <div class="hud-label">Ping</div>
-          <div id="hudPing" class="hud-value">-- ms</div>
-        </div>
+        <div id="hudPing" class="hud-ping">PING: -- ms</div>
       </div>
     </div>
   </div>

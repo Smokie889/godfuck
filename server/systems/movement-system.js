@@ -2,9 +2,6 @@ const {
   WORLD_SIZE,
   PLAYER_SIZE,
   PLAYER_SPEED,
-  DASH_STAMINA_COST,
-  DASH_MIN_STAMINA_REQUIRED,
-  STAMINA_RECOVERY_PER_SECOND,
   DASH_SPEED_MULTIPLIER,
   DASH_DURATION_MS,
   DASH_COOLDOWN_MS,
@@ -77,16 +74,11 @@ function tryStartDash(player, inputState = player.inputState) {
     return false;
   }
 
-  if (player.stamina < DASH_MIN_STAMINA_REQUIRED) {
-    return false;
-  }
-
   const dir = getMovementDirection(inputState);
   if (!dir) {
     return false;
   }
 
-  player.stamina = Math.max(0, player.stamina - DASH_STAMINA_COST);
   player.dashTimeRemaining = DASH_DURATION_MS / 1000;
   player.dashCooldownRemaining = DASH_COOLDOWN_MS / 1000;
   player.dashFacing.x = dir.x;
@@ -99,15 +91,6 @@ function tryStartDash(player, inputState = player.inputState) {
 function tickPlayerDashState(player, deltaTime) {
   player.dashTimeRemaining = Math.max(0, player.dashTimeRemaining - deltaTime);
   player.dashCooldownRemaining = Math.max(0, player.dashCooldownRemaining - deltaTime);
-
-  if (player.dashTimeRemaining > 0) {
-    return;
-  }
-
-  player.stamina = Math.min(
-    player.maxStamina,
-    player.stamina + STAMINA_RECOVERY_PER_SECOND * deltaTime
-  );
 }
 
 // 確保角色不會走出世界邊界。

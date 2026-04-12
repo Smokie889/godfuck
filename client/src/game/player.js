@@ -7,8 +7,6 @@ export function copyPlayerState(source) {
     y: source.y,
     hp: source.hp,
     maxHp: source.maxHp,
-    stamina: source.stamina ?? 100,
-    maxStamina: source.maxStamina ?? 100,
     lastProcessedInput: source.lastProcessedInput || 0,
     isHit: !!source.isHit,
     dashTimeRemaining: source.dashTimeRemaining ?? 0,
@@ -50,8 +48,6 @@ export function mergePlayerState(currentPlayer, nextState) {
     y: nextState.y ?? currentPlayer.y,
     hp: nextState.hp ?? currentPlayer.hp,
     maxHp: nextState.maxHp ?? currentPlayer.maxHp,
-    stamina: nextState.stamina ?? currentPlayer.stamina,
-    maxStamina: nextState.maxStamina ?? currentPlayer.maxStamina,
     lastProcessedInput: nextState.lastProcessedInput ?? currentPlayer.lastProcessedInput ?? 0,
     isHit: nextState.isHit ?? currentPlayer.isHit ?? false,
     dashTimeRemaining: nextState.dashTimeRemaining ?? currentPlayer.dashTimeRemaining ?? 0,
@@ -109,8 +105,6 @@ export function mergeCombatState(currentPlayer, nextState) {
     id: nextState.id || currentPlayer.id,
     hp: nextState.hp ?? currentPlayer.hp,
     maxHp: nextState.maxHp ?? currentPlayer.maxHp,
-    stamina: nextState.stamina ?? currentPlayer.stamina,
-    maxStamina: nextState.maxStamina ?? currentPlayer.maxStamina,
     isHit: nextState.isHit ?? currentPlayer.isHit ?? false,
   };
 }

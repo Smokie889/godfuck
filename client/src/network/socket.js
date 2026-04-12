@@ -1,7 +1,10 @@
 import { LOCAL_PREDICTION_SCALE, TICK_DELTA, WS_URL } from "../config.js";
 import { logOutgoing, logRuntime } from "../debug/debugUi.js";
 import { copyBulletState } from "../game/bullets.js";
-import { applyInputToPositionWithPlayerCollision } from "../game/movement.js";
+import {
+  applyInputToPositionWithPlayerCollision,
+  tryStartLocalDash,
+} from "../game/movement.js";
 import {
   copyPlayerState,
   mergeCombatState,
@@ -56,6 +59,36 @@ export function createSocketClient(state, bounds, chatController, playerId) {
     return ws.readyState === WebSocket.OPEN && !!state.myId;
   }
 
+  function spawnDashTrail(playerId, player, isLocal = false) {
+    if (!player || !player.dashFacing) {
+      return;
+    }
+
+    const now = performance.now();
+
+    state.dashTrails.push({
+      playerId,
+      x: player.x,
+      y: player.y,
+      dirX: player.dashFacing.x,
+      dirY: player.dashFacing.y,
+      spawnedAt: now,
+      expiresAt: now + 220,
+      color: isLocal ? "#ff4d4f" : "#4da6ff",
+    });
+
+    state.dashBursts.push({
+      playerId,
+      x: player.x,
+      y: player.y,
+      dirX: player.dashFacing.x,
+      dirY: player.dashFacing.y,
+      spawnedAt: now,
+      expiresAt: now + 130,
+      color: isLocal ? "#ffb3b3" : "#b8d9ff",
+    });
+  }
+
   // 移動輸入屬於高頻封包，但只有在「真的在移動」或「輸入狀態有變」時才會送。
   function sendCurrentInputState(inputSnapshot = state.inputState) {
     if (!canSend()) {
@@ -72,7 +105,6 @@ export function createSocketClient(state, bounds, chatController, playerId) {
       down: inputSnapshot.down,
       left: inputSnapshot.left,
       right: inputSnapshot.right,
-      dash: !!inputSnapshot.dash,
     };
 
     logOutgoing(state, "INPUT", {
@@ -81,13 +113,33 @@ export function createSocketClient(state, bounds, chatController, playerId) {
       down: +packet.down,
       left: +packet.left,
       right: +packet.right,
-      dash: +packet.dash,
     });
     ws.send(JSON.stringify(packet));
-    if (inputSnapshot.dash) {
-      state.inputState.dash = false;
-    }
     return state.lastSentInputSeq;
+  }
+
+  function sendDash() {
+    if (!canSend()) {
+      logRuntime(state, "DASH_BLOCKED", { readyState: ws.readyState, myId: state.myId || "null" });
+      return false;
+    }
+
+    const dashStarted = tryStartLocalDash(state.localPlayer, state.inputState);
+    if (!dashStarted) {
+      return false;
+    }
+
+    spawnDashTrail(state.myId, state.localPlayer, true);
+
+    logOutgoing(state, "DASH", {
+      cooldown: state.localPlayer.dashCooldownRemaining.toFixed(2),
+    });
+    ws.send(
+      JSON.stringify({
+        type: "dash",
+      })
+    );
+    return true;
   }
 
   function sendShoot(aimX, aimY) {
@@ -191,8 +243,6 @@ export function createSocketClient(state, bounds, chatController, playerId) {
       if (state.players[state.myId]) {
         state.localPlayer.x = state.players[state.myId].x;
         state.localPlayer.y = state.players[state.myId].y;
-        state.localPlayer.stamina = state.players[state.myId].stamina;
-        state.localPlayer.maxStamina = state.players[state.myId].maxStamina;
         state.localPlayer.moveFacing = { ...state.players[state.myId].moveFacing };
         state.localPlayer.aimFacing = { ...state.players[state.myId].aimFacing };
         state.localPlayer.dashTimeRemaining = state.players[state.myId].dashTimeRemaining || 0;
@@ -201,8 +251,6 @@ export function createSocketClient(state, bounds, chatController, playerId) {
         state.localPlayer.dashFacing = {
           ...(state.players[state.myId].dashFacing || state.localPlayer.dashFacing),
         };
-        state.hud.stamina = state.players[state.myId].stamina;
-        state.hud.maxStamina = state.players[state.myId].maxStamina;
         state.localMeta.previousHp = state.players[state.myId].hp;
         state.localRenderPlayer.x = state.localPlayer.x;
         state.localRenderPlayer.y = state.localPlayer.y;
@@ -227,8 +275,16 @@ export function createSocketClient(state, bounds, chatController, playerId) {
     // 本地玩家收到後還要做 reconciliation，把尚未被 server ack 的輸入重放一次。
     if (data.type === "movementPatch") {
       for (const id in data.players) {
+        const previousPlayer = state.players[id];
         const serverPlayer = mergeMovementState(state.players[id], data.players[id]);
         state.players[id] = serverPlayer;
+
+        const dashJustStarted =
+          (previousPlayer?.dashTimeRemaining || 0) <= 0 && (serverPlayer.dashTimeRemaining || 0) > 0;
+
+        if (dashJustStarted && id !== state.myId) {
+          spawnDashTrail(id, serverPlayer, false);
+        }
 
         if (!state.renderPlayers[id]) {
           state.renderPlayers[id] = { x: serverPlayer.x, y: serverPlayer.y };
@@ -282,22 +338,9 @@ export function createSocketClient(state, bounds, chatController, playerId) {
         const respawned =
           serverPlayer.hp === serverPlayer.maxHp && previousHp < serverPlayer.hp;
 
-        if (combatPatch.stamina !== undefined) {
-          state.localPlayer.stamina = combatPatch.stamina;
-          state.hud.stamina = combatPatch.stamina;
-        }
-
-        if (combatPatch.maxStamina !== undefined) {
-          state.localPlayer.maxStamina = combatPatch.maxStamina;
-          state.hud.maxStamina = combatPatch.maxStamina;
-        }
-
         if (respawned) {
           resetSpread(state);
           state.pendingInputs = [];
-          state.localPlayer.stamina = state.localPlayer.maxStamina;
-          state.hud.stamina = state.localPlayer.maxStamina;
-          state.players[id].stamina = state.players[id].maxStamina;
         }
       }
 
@@ -362,6 +405,7 @@ export function createSocketClient(state, bounds, chatController, playerId) {
 
   return {
     sendAim,
+    sendDash,
     sendShoot,
     sendChat,
     sendCurrentInputState,

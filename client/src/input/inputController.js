@@ -4,7 +4,6 @@ export function createInputController(state, chatInput, actions) {
     state.inputState.down = false;
     state.inputState.left = false;
     state.inputState.right = false;
-    state.inputState.dash = false;
     state.inputState.dashHeld = false;
   }
 
@@ -72,8 +71,8 @@ export function createInputController(state, chatInput, actions) {
 
     if (event.key === "Shift") {
       if (!state.inputState.dashHeld) {
-        state.inputState.dash = true;
         state.inputState.dashHeld = true;
+        actions.sendDash();
       }
       return;
     }
