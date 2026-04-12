@@ -17,6 +17,8 @@ import { createSocketClient } from "./network/socket.js";
 import { createRenderer } from "./render/renderer.js";
 import { createGameState } from "./state/gameState.js";
 
+// 主遊戲頁只保留實際遊玩所需的 DOM。
+// debug 畫面已經抽到獨立的 debug.html。
 const canvas = document.getElementById("game");
 const chatBox = document.getElementById("chatBox");
 const chatInput = document.getElementById("chatInput");
@@ -35,6 +37,7 @@ const bounds = {
   height: canvas.height,
 };
 
+// accumulator 固定步進遊戲邏輯，避免 frame rate 波動直接改變模擬結果。
 let accumulator = 0;
 let lastTime = performance.now();
 let gameStarted = false;
@@ -53,6 +56,7 @@ function cloneInputState(inputState) {
   };
 }
 
+// 用簡單字串表示目前 WASD 狀態，方便判斷輸入是否真的有變。
 function getInputSignature(inputState) {
   return `${+inputState.up},${+inputState.down},${+inputState.left},${+inputState.right}`;
 }
@@ -71,6 +75,7 @@ function gameLoop(now) {
   if (frameTime > 100) frameTime = 100;
   lastTime = now;
 
+  // 滑鼠瞄準是節流傳送，不需要每一幀無條件送出。
   if (state.mouse.insideCanvas && !state.isChatting) {
     const aimDirection = updateLocalFacingFromMouse(state);
     if (shouldSendAim(state, aimDirection)) {
@@ -79,6 +84,7 @@ function gameLoop(now) {
     }
   }
 
+  // 射擊意圖與移動輸入分開處理，避免互相耦合。
   if (state.mouse.leftDown && !state.isChatting) {
     const intent = buildShootIntent(state, canvas);
     if (intent) {
@@ -106,6 +112,7 @@ function gameLoop(now) {
       }
     }
 
+    // client 端先做本地預測，讓移動不必完全等 server 回來才看到。
     simulateInputTick(state, inputSnapshot, TICK_DELTA * LOCAL_PREDICTION_SCALE, bounds);
     updateSpread(state, TICK_DELTA);
     updateLocalBullets(state, TICK_DELTA, bounds.width);
@@ -115,6 +122,7 @@ function gameLoop(now) {
   updateRenderPlayers(state);
   renderer.draw();
   hudUi.render();
+  // 主畫面不再顯示 debug，但仍把快照廣播給獨立 debug 頁。
   debugBridge.publish(buildDebugSnapshot(state));
   requestAnimationFrame(gameLoop);
 }
@@ -135,6 +143,7 @@ function startGame(requestedPlayerId) {
     return;
   }
 
+  // 每次開始新的一局，都重新建立整份前端遊戲 state。
   state = createGameState();
   state.requestedPlayerId = requestedPlayerId;
 

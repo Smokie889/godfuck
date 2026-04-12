@@ -1,3 +1,5 @@
+// 把 server 傳來的玩家資料轉成 client 端慣用的物件格式。
+// 這裡會順手補上預設值，讓後續渲染與同步 merge 比較安全。
 export function copyPlayerState(source) {
   const result = {
     id: source.id,
@@ -28,6 +30,7 @@ export function copyPlayerState(source) {
   return result;
 }
 
+// 通用 merge：如果未來有完整 player patch，可以用這個把局部欄位補回現有狀態。
 export function mergePlayerState(currentPlayer, nextState) {
   if (!currentPlayer) {
     return copyPlayerState(nextState);
@@ -56,6 +59,7 @@ export function mergePlayerState(currentPlayer, nextState) {
   return mergedPlayer;
 }
 
+// 專門處理移動同步的 merge，只更新位置、ack 與移動方向。
 export function mergeMovementState(currentPlayer, nextState) {
   if (!currentPlayer) {
     return copyPlayerState(nextState);
@@ -73,6 +77,7 @@ export function mergeMovementState(currentPlayer, nextState) {
   };
 }
 
+// 專門處理戰鬥同步的 merge，只更新血量與受擊狀態。
 export function mergeCombatState(currentPlayer, nextState) {
   if (!currentPlayer) {
     return copyPlayerState(nextState);

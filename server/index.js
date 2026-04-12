@@ -1,7 +1,7 @@
 const { TICK_INTERVAL, SERVER_PORT } = require("./config");
 const { players, bullets } = require("./world/state");
 const { createPlayer } = require("./world/create-player");
-const { updateMovement } = require("./systems/movement-system");
+const { resolvePlayerCollisions } = require("./systems/player-collision-system");
 const {
   serializePlayerPatches,
   serializePlayer,
@@ -13,6 +13,8 @@ const { handlePacket } = require("./net/packet-handlers");
 const { SERVER_MESSAGE_TYPES } = require("./net/protocol");
 
 const wss = createSocketServer();
+// 用來記住上一個 tick 已經送出去的完整玩家快照。
+// 之後 server 會拿目前狀態和它比較，只廣播有變動的欄位。
 const previousStateSnapshots = {};
 
 function sanitizePlayerId(rawId) {
@@ -54,6 +56,7 @@ wss.on("connection", (ws, req) => {
     JSON.stringify({
       type: SERVER_MESSAGE_TYPES.INIT,
       id,
+      // 初次連線仍然要送完整狀態，讓 client 能立刻建立本地世界。
       players: serializePlayers(players, Date.now(), { includeAimFacing: true }),
       bullets: serializeBullets(bullets),
     })
@@ -92,9 +95,12 @@ setInterval(() => {
   const deltaTime = TICK_INTERVAL / 1000;
   const now = Date.now();
 
-  updateMovement(players, deltaTime);
+  // 先解玩家移動與玩家間碰撞，再更新子彈與命中結果。
+  resolvePlayerCollisions(players, deltaTime);
   updateBullets({ bullets, players, deltaTime, wss, broadcast });
 
+  // 把同步拆成移動 patch 和戰鬥 patch：
+  // 高頻的位移/ack 走 movement，血量/受擊走 combat。
   const { movementPlayers, combatPlayers } = serializePlayerPatches(
     players,
     now,

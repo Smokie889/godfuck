@@ -1,7 +1,10 @@
 import { LOCAL_RENDER_LERP, PLAYER_SIZE, PLAYER_SPEED, REMOTE_RENDER_LERP } from "../config.js";
 import { clamp, lerp, normalize } from "./math.js";
 
-export function applyInputToPosition(position, inputState, deltaTime, facingHolder, bounds) {
+// client 端的輕量碰撞預測半徑，先和 server 保持同樣大小。
+const PLAYER_COLLISION_RADIUS = PLAYER_SIZE * 0.5;
+
+function buildMovementDelta(inputState, deltaTime, facingHolder) {
   let dx = 0;
   let dy = 0;
 
@@ -10,7 +13,9 @@ export function applyInputToPosition(position, inputState, deltaTime, facingHold
   if (inputState.left) dx -= 1;
   if (inputState.right) dx += 1;
 
-  if (dx === 0 && dy === 0) return;
+  if (dx === 0 && dy === 0) {
+    return null;
+  }
 
   const dir = normalize(dx, dy);
   dx = dir.x;
@@ -21,15 +26,130 @@ export function applyInputToPosition(position, inputState, deltaTime, facingHold
     facingHolder.y = dy;
   }
 
-  position.x += dx * PLAYER_SPEED * deltaTime;
-  position.y += dy * PLAYER_SPEED * deltaTime;
+  return {
+    dx: dx * PLAYER_SPEED * deltaTime,
+    dy: dy * PLAYER_SPEED * deltaTime,
+  };
+}
+
+function clampPosition(position, bounds) {
+  return {
+    x: clamp(position.x, 0, bounds.width - PLAYER_SIZE),
+    y: clamp(position.y, 0, bounds.height - PLAYER_SIZE),
+  };
+}
+
+function getPlayerCenter(position) {
+  return {
+    x: position.x + PLAYER_SIZE / 2,
+    y: position.y + PLAYER_SIZE / 2,
+  };
+}
+
+function positionsOverlap(a, b) {
+  const centerA = getPlayerCenter(a);
+  const centerB = getPlayerCenter(b);
+  const minDistance = PLAYER_COLLISION_RADIUS * 2;
+  return Math.hypot(centerA.x - centerB.x, centerA.y - centerB.y) < minDistance;
+}
+
+function collidesWithOtherPlayers(state, candidatePosition) {
+  for (const playerId in state.players) {
+    if (playerId === state.myId) {
+      continue;
+    }
+
+    const otherPlayer = state.players[playerId];
+    if (!otherPlayer) {
+      continue;
+    }
+
+    if (positionsOverlap(candidatePosition, otherPlayer)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export function applyInputToPosition(position, inputState, deltaTime, facingHolder, bounds) {
+  const movement = buildMovementDelta(inputState, deltaTime, facingHolder);
+  if (!movement) {
+    return;
+  }
+
+  position.x += movement.dx;
+  position.y += movement.dy;
 
   position.x = clamp(position.x, 0, bounds.width - PLAYER_SIZE);
   position.y = clamp(position.y, 0, bounds.height - PLAYER_SIZE);
 }
 
+// 只對本地玩家做輕量版玩家碰撞預測：
+// 先嘗試完整位移，不行就拆成 X / Y 單軸嘗試，盡量貼近 server 規則。
+export function applyInputToPositionWithPlayerCollision(
+  state,
+  position,
+  inputState,
+  deltaTime,
+  facingHolder,
+  bounds
+) {
+  const movement = buildMovementDelta(inputState, deltaTime, facingHolder);
+  if (!movement) {
+    return;
+  }
+
+  const currentPosition = {
+    x: position.x,
+    y: position.y,
+  };
+
+  const desiredPosition = clampPosition(
+    {
+      x: currentPosition.x + movement.dx,
+      y: currentPosition.y + movement.dy,
+    },
+    bounds
+  );
+
+  if (!collidesWithOtherPlayers(state, desiredPosition)) {
+    position.x = desiredPosition.x;
+    position.y = desiredPosition.y;
+    return;
+  }
+
+  const xOnlyPosition = clampPosition(
+    {
+      x: desiredPosition.x,
+      y: currentPosition.y,
+    },
+    bounds
+  );
+
+  if (!collidesWithOtherPlayers(state, xOnlyPosition)) {
+    position.x = xOnlyPosition.x;
+    position.y = xOnlyPosition.y;
+    return;
+  }
+
+  const yOnlyPosition = clampPosition(
+    {
+      x: currentPosition.x,
+      y: desiredPosition.y,
+    },
+    bounds
+  );
+
+  if (!collidesWithOtherPlayers(state, yOnlyPosition)) {
+    position.x = yOnlyPosition.x;
+    position.y = yOnlyPosition.y;
+  }
+}
+
 export function simulateLocalTick(state, deltaTime, bounds) {
-  applyInputToPosition(
+  applyInputToPositionWithPlayerCollision(
+    state,
     state.localPlayer,
     state.inputState,
     deltaTime,
@@ -39,7 +159,8 @@ export function simulateLocalTick(state, deltaTime, bounds) {
 }
 
 export function simulateInputTick(state, inputState, deltaTime, bounds) {
-  applyInputToPosition(
+  applyInputToPositionWithPlayerCollision(
+    state,
     state.localPlayer,
     inputState,
     deltaTime,

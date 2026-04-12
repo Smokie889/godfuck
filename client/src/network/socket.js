@@ -1,7 +1,7 @@
 import { LOCAL_PREDICTION_SCALE, TICK_DELTA, WS_URL } from "../config.js";
 import { logOutgoing, logRuntime } from "../debug/debugUi.js";
 import { copyBulletState } from "../game/bullets.js";
-import { applyInputToPosition } from "../game/movement.js";
+import { applyInputToPositionWithPlayerCollision } from "../game/movement.js";
 import {
   copyPlayerState,
   mergeCombatState,
@@ -9,12 +9,17 @@ import {
 } from "../game/player.js";
 import { resetSpread } from "../game/shooting.js";
 
+// 建立 WebSocket client，統一管理：
+// 1. 對 server 發送輸入/射擊/聊天
+// 2. 接收各種 patch/event
+// 3. 把同步結果寫回前端 state
 export function createSocketClient(state, bounds, chatController, playerId) {
   const connectUrl = new URL(WS_URL);
   connectUrl.searchParams.set("playerId", playerId);
 
   const ws = new WebSocket(connectUrl.toString());
   state.network.wsReadyState = ws.readyState;
+  // 固定 ping 間隔，用來估算目前網路延遲。
   const PING_INTERVAL_MS = 1000;
 
   function updatePing(rtt) {
@@ -51,6 +56,7 @@ export function createSocketClient(state, bounds, chatController, playerId) {
     return ws.readyState === WebSocket.OPEN && !!state.myId;
   }
 
+  // 移動輸入屬於高頻封包，但只有在「真的在移動」或「輸入狀態有變」時才會送。
   function sendCurrentInputState(inputSnapshot = state.inputState) {
     if (!canSend()) {
       logRuntime(state, "INPUT_BLOCKED", { readyState: ws.readyState, myId: state.myId || "null" });
@@ -163,6 +169,7 @@ export function createSocketClient(state, bounds, chatController, playerId) {
         bullets: Object.keys(data.bullets || {}).length,
       });
 
+      // init 是全量同步：第一次進場時直接用 server 狀態初始化整個 client 世界。
       for (const id in data.players) {
         state.players[id] = copyPlayerState(data.players[id]);
         state.renderPlayers[id] = {
@@ -201,6 +208,8 @@ export function createSocketClient(state, bounds, chatController, playerId) {
       return;
     }
 
+    // movementPatch 只更新和移動預測相關的欄位。
+    // 本地玩家收到後還要做 reconciliation，把尚未被 server ack 的輸入重放一次。
     if (data.type === "movementPatch") {
       for (const id in data.players) {
         const serverPlayer = mergeMovementState(state.players[id], data.players[id]);
@@ -221,7 +230,8 @@ export function createSocketClient(state, bounds, chatController, playerId) {
         state.pendingInputs = state.pendingInputs.filter((entry) => entry.seq > serverAck);
 
         for (const pendingInput of state.pendingInputs) {
-          applyInputToPosition(
+          applyInputToPositionWithPlayerCollision(
+            state,
             state.localPlayer,
             pendingInput.inputState,
             TICK_DELTA * LOCAL_PREDICTION_SCALE,
@@ -234,6 +244,7 @@ export function createSocketClient(state, bounds, chatController, playerId) {
       return;
     }
 
+    // combatPatch 只更新血量與受擊狀態，避免污染高頻移動同步。
     if (data.type === "combatPatch") {
       for (const id in data.players) {
         const serverPlayer = mergeCombatState(state.players[id], data.players[id]);
@@ -258,6 +269,7 @@ export function createSocketClient(state, bounds, chatController, playerId) {
       return;
     }
 
+    // aim 是獨立事件，不再夾在高頻 movement patch 裡。
     if (data.type === "aim") {
       if (state.players[data.playerId]) {
         state.players[data.playerId].aimFacing = {
@@ -276,6 +288,7 @@ export function createSocketClient(state, bounds, chatController, playerId) {
       return;
     }
 
+    // 子彈位置不走每 tick 廣播，只處理生成與移除，飛行由 client 本地模擬。
     if (data.type === "bulletSpawn") {
       state.bullets[data.bullet.id] = copyBulletState(data.bullet);
       return;

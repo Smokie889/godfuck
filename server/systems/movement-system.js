@@ -16,7 +16,8 @@ function normalize(dx, dy) {
   };
 }
 
-function applyInputToPlayer(player, inputState, deltaTime) {
+// 把輸入方向轉成這個 tick 實際應該移動多少距離。
+function getMovementDelta(inputState, deltaTime) {
   let dx = 0;
   let dy = 0;
 
@@ -26,21 +27,54 @@ function applyInputToPlayer(player, inputState, deltaTime) {
   if (inputState.right) dx += 1;
 
   if (dx === 0 && dy === 0) {
-    return;
+    return {
+      dx: 0,
+      dy: 0,
+      dir: { x: 0, y: 0 },
+    };
   }
 
   const dir = normalize(dx, dy);
 
-  player.moveFacing.x = dir.x;
-  player.moveFacing.y = dir.y;
-
-  player.x += dir.x * PLAYER_SPEED * deltaTime;
-  player.y += dir.y * PLAYER_SPEED * deltaTime;
-
-  player.x = clamp(player.x, 0, WORLD_SIZE - PLAYER_SIZE);
-  player.y = clamp(player.y, 0, WORLD_SIZE - PLAYER_SIZE);
+  return {
+    dx: dir.x * PLAYER_SPEED * deltaTime,
+    dy: dir.y * PLAYER_SPEED * deltaTime,
+    dir,
+  };
 }
 
+// 確保角色不會走出世界邊界。
+function clampPlayerPosition(position) {
+  return {
+    x: clamp(position.x, 0, WORLD_SIZE - PLAYER_SIZE),
+    y: clamp(position.y, 0, WORLD_SIZE - PLAYER_SIZE),
+  };
+}
+
+// 先計算玩家「想走到哪裡」。
+// 真正能不能站進去，會由 player-collision-system 決定。
+function buildDesiredPlayerPosition(player, inputState, deltaTime) {
+  const movement = getMovementDelta(inputState, deltaTime);
+
+  if (movement.dir.x !== 0 || movement.dir.y !== 0) {
+    player.moveFacing.x = movement.dir.x;
+    player.moveFacing.y = movement.dir.y;
+  }
+
+  return clampPlayerPosition({
+    x: player.x + movement.dx,
+    y: player.y + movement.dy,
+  });
+}
+
+function applyInputToPlayer(player, inputState, deltaTime) {
+  const desiredPosition = buildDesiredPlayerPosition(player, inputState, deltaTime);
+
+  player.x = desiredPosition.x;
+  player.y = desiredPosition.y;
+}
+
+// 保留這個入口，方便未來單獨測試純移動數學。
 function updateMovement(players, deltaTime) {
   for (const id in players) {
     const player = players[id];
@@ -51,4 +85,6 @@ function updateMovement(players, deltaTime) {
 module.exports = {
   updateMovement,
   applyInputToPlayer,
+  buildDesiredPlayerPosition,
+  clampPlayerPosition,
 };

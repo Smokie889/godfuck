@@ -1,3 +1,4 @@
+// HUD 只負責把目前 state 映射到畫面文字，不混入遊戲邏輯。
 export function createHudUi(state, elements) {
   function render() {
     const currentPlayer = state.myId ? state.players[state.myId] : null;

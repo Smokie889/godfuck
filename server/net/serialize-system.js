@@ -1,3 +1,5 @@
+// 把 server 內部玩家狀態轉成可傳輸的純資料物件。
+// 這裡會決定 client 能看見哪些欄位。
 function serializePlayer(player, now, options = {}) {
   const payload = {
     id: player.id,
@@ -36,6 +38,7 @@ function serializePlayers(players, now, options = {}) {
   return result;
 }
 
+// 用來比較方向向量是否真的改變，避免不必要地重送 moveFacing。
 function hasSameFacing(a, b) {
   if (!a && !b) {
     return true;
@@ -48,6 +51,7 @@ function hasSameFacing(a, b) {
   return a.x === b.x && a.y === b.y;
 }
 
+// movement patch 只承擔高頻且和移動預測相關的欄位。
 function buildMovementPatch(previousState, nextState) {
   if (!previousState) {
     return {
@@ -72,6 +76,7 @@ function buildMovementPatch(previousState, nextState) {
   return patch;
 }
 
+// combat patch 只承擔戰鬥結果，避免血量等欄位混進高頻移動同步。
 function buildCombatPatch(previousState, nextState) {
   if (!previousState) {
     return {
@@ -90,6 +95,8 @@ function buildCombatPatch(previousState, nextState) {
   return patch;
 }
 
+// 依據上一個快照，為每個玩家產生欄位級 delta patch。
+// 最終會拆成兩條訊息：movementPlayers / combatPlayers。
 function serializePlayerPatches(players, now, previousStateSnapshots) {
   const movementPlayers = {};
   const combatPlayers = {};
