@@ -4,31 +4,41 @@ export function createInputController(state, chatInput, actions) {
     state.inputState.down = false;
     state.inputState.left = false;
     state.inputState.right = false;
+    state.inputState.dash = false;
+    state.inputState.dashHeld = false;
+  }
+
+  function normalizeKey(key) {
+    if (key === "ArrowUp" || key === "ArrowDown" || key === "ArrowLeft" || key === "ArrowRight") {
+      return key;
+    }
+
+    return key.length === 1 ? key.toLowerCase() : key;
   }
 
   function updateKeyState(key, isPressed) {
+    const normalizedKey = normalizeKey(key);
     let changed = false;
 
-    if (key === "w" || key === "ArrowUp") {
+    if (normalizedKey === "w" || normalizedKey === "ArrowUp") {
       changed = state.inputState.up !== isPressed || changed;
       state.inputState.up = isPressed;
     }
 
-    if (key === "s" || key === "ArrowDown") {
+    if (normalizedKey === "s" || normalizedKey === "ArrowDown") {
       changed = state.inputState.down !== isPressed || changed;
       state.inputState.down = isPressed;
     }
 
-    if (key === "a" || key === "ArrowLeft") {
+    if (normalizedKey === "a" || normalizedKey === "ArrowLeft") {
       changed = state.inputState.left !== isPressed || changed;
       state.inputState.left = isPressed;
     }
 
-    if (key === "d" || key === "ArrowRight") {
+    if (normalizedKey === "d" || normalizedKey === "ArrowRight") {
       changed = state.inputState.right !== isPressed || changed;
       state.inputState.right = isPressed;
     }
-
   }
 
   document.addEventListener("keydown", (event) => {
@@ -60,10 +70,23 @@ export function createInputController(state, chatInput, actions) {
       return;
     }
 
+    if (event.key === "Shift") {
+      if (!state.inputState.dashHeld) {
+        state.inputState.dash = true;
+        state.inputState.dashHeld = true;
+      }
+      return;
+    }
+
     updateKeyState(event.key, true);
   });
 
   document.addEventListener("keyup", (event) => {
+    if (event.key === "Shift") {
+      state.inputState.dashHeld = false;
+      return;
+    }
+
     if (state.isChatting) {
       return;
     }
@@ -100,6 +123,11 @@ export function createInputController(state, chatInput, actions) {
       return;
     }
 
+    state.mouse.leftDown = false;
+  });
+
+  window.addEventListener("blur", () => {
+    stopAllMovementInput();
     state.mouse.leftDown = false;
   });
 

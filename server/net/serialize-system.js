@@ -15,7 +15,15 @@ function serializePlayer(player, now, options = {}) {
     },
     hp: player.hp,
     maxHp: player.maxHp,
+    stamina: player.stamina,
+    maxStamina: player.maxStamina,
     isHit: now < player.hitFlashUntil,
+    dashTimeRemaining: player.dashTimeRemaining,
+    dashCooldownRemaining: player.dashCooldownRemaining,
+    dashFacing: {
+      x: player.dashFacing.x,
+      y: player.dashFacing.y,
+    },
   };
 
   if (options.includeAimFacing) {
@@ -72,6 +80,15 @@ function buildMovementPatch(previousState, nextState) {
   if (!hasSameFacing(previousState.moveFacing, nextState.moveFacing)) {
     patch.moveFacing = nextState.moveFacing;
   }
+  if (previousState.dashTimeRemaining !== nextState.dashTimeRemaining) {
+    patch.dashTimeRemaining = nextState.dashTimeRemaining;
+  }
+  if (previousState.dashCooldownRemaining !== nextState.dashCooldownRemaining) {
+    patch.dashCooldownRemaining = nextState.dashCooldownRemaining;
+  }
+  if (!hasSameFacing(previousState.dashFacing, nextState.dashFacing)) {
+    patch.dashFacing = nextState.dashFacing;
+  }
 
   return patch;
 }
@@ -82,14 +99,24 @@ function buildCombatPatch(previousState, nextState) {
     return {
       hp: nextState.hp,
       maxHp: nextState.maxHp,
+      stamina: nextState.stamina,
+      maxStamina: nextState.maxStamina,
       isHit: nextState.isHit,
     };
   }
 
   const patch = {};
+  const staminaSpent = previousState.stamina > nextState.stamina;
+  const staminaResetToFull =
+    previousState.stamina < nextState.stamina &&
+    nextState.stamina === nextState.maxStamina;
 
   if (previousState.hp !== nextState.hp) patch.hp = nextState.hp;
   if (previousState.maxHp !== nextState.maxHp) patch.maxHp = nextState.maxHp;
+  if (staminaSpent || staminaResetToFull) patch.stamina = nextState.stamina;
+  if (previousState.maxStamina !== nextState.maxStamina) {
+    patch.maxStamina = nextState.maxStamina;
+  }
   if (previousState.isHit !== nextState.isHit) patch.isHit = nextState.isHit;
 
   return patch;

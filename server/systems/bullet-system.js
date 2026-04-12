@@ -34,7 +34,10 @@ function respawnPlayer(player) {
   player.x = spawn.x;
   player.y = spawn.y;
   player.hp = player.maxHp;
+  player.stamina = player.maxStamina;
   player.hitFlashUntil = 0;
+  player.dashTimeRemaining = 0;
+  player.dashCooldownRemaining = 0;
 }
 
 function createBullet(ownerId, player, direction) {

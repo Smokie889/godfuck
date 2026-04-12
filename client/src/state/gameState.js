@@ -10,8 +10,13 @@ export function createGameState() {
     localPlayer: {
       x: 0,
       y: 0,
+      stamina: 100,
+      maxStamina: 100,
       moveFacing: { x: 0, y: -1 },
       aimFacing: { x: 0, y: -1 },
+      dashTimeRemaining: 0,
+      dashCooldownRemaining: 0,
+      dashFacing: { x: 0, y: -1 },
     },
     localRenderPlayer: {
       x: 0,
@@ -22,6 +27,8 @@ export function createGameState() {
       down: false,
       left: false,
       right: false,
+      dash: false,
+      dashHeld: false,
     },
     pendingInputs: [],
     nextInputSeq: 1,

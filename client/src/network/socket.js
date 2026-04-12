@@ -72,6 +72,7 @@ export function createSocketClient(state, bounds, chatController, playerId) {
       down: inputSnapshot.down,
       left: inputSnapshot.left,
       right: inputSnapshot.right,
+      dash: !!inputSnapshot.dash,
     };
 
     logOutgoing(state, "INPUT", {
@@ -80,8 +81,12 @@ export function createSocketClient(state, bounds, chatController, playerId) {
       down: +packet.down,
       left: +packet.left,
       right: +packet.right,
+      dash: +packet.dash,
     });
     ws.send(JSON.stringify(packet));
+    if (inputSnapshot.dash) {
+      state.inputState.dash = false;
+    }
     return state.lastSentInputSeq;
   }
 
@@ -186,8 +191,18 @@ export function createSocketClient(state, bounds, chatController, playerId) {
       if (state.players[state.myId]) {
         state.localPlayer.x = state.players[state.myId].x;
         state.localPlayer.y = state.players[state.myId].y;
+        state.localPlayer.stamina = state.players[state.myId].stamina;
+        state.localPlayer.maxStamina = state.players[state.myId].maxStamina;
         state.localPlayer.moveFacing = { ...state.players[state.myId].moveFacing };
         state.localPlayer.aimFacing = { ...state.players[state.myId].aimFacing };
+        state.localPlayer.dashTimeRemaining = state.players[state.myId].dashTimeRemaining || 0;
+        state.localPlayer.dashCooldownRemaining =
+          state.players[state.myId].dashCooldownRemaining || 0;
+        state.localPlayer.dashFacing = {
+          ...(state.players[state.myId].dashFacing || state.localPlayer.dashFacing),
+        };
+        state.hud.stamina = state.players[state.myId].stamina;
+        state.hud.maxStamina = state.players[state.myId].maxStamina;
         state.localMeta.previousHp = state.players[state.myId].hp;
         state.localRenderPlayer.x = state.localPlayer.x;
         state.localRenderPlayer.y = state.localPlayer.y;
@@ -227,6 +242,12 @@ export function createSocketClient(state, bounds, chatController, playerId) {
         state.localPlayer.x = serverPlayer.x;
         state.localPlayer.y = serverPlayer.y;
         state.localPlayer.moveFacing = { ...serverPlayer.moveFacing };
+        state.localPlayer.dashTimeRemaining = serverPlayer.dashTimeRemaining || 0;
+        state.localPlayer.dashCooldownRemaining =
+          serverPlayer.dashCooldownRemaining || 0;
+        state.localPlayer.dashFacing = {
+          ...(serverPlayer.dashFacing || state.localPlayer.dashFacing),
+        };
         state.pendingInputs = state.pendingInputs.filter((entry) => entry.seq > serverAck);
 
         for (const pendingInput of state.pendingInputs) {
@@ -247,7 +268,8 @@ export function createSocketClient(state, bounds, chatController, playerId) {
     // combatPatch 只更新血量與受擊狀態，避免污染高頻移動同步。
     if (data.type === "combatPatch") {
       for (const id in data.players) {
-        const serverPlayer = mergeCombatState(state.players[id], data.players[id]);
+        const combatPatch = data.players[id];
+        const serverPlayer = mergeCombatState(state.players[id], combatPatch);
         state.players[id] = serverPlayer;
 
         if (id !== state.myId) {
@@ -260,9 +282,22 @@ export function createSocketClient(state, bounds, chatController, playerId) {
         const respawned =
           serverPlayer.hp === serverPlayer.maxHp && previousHp < serverPlayer.hp;
 
+        if (combatPatch.stamina !== undefined) {
+          state.localPlayer.stamina = combatPatch.stamina;
+          state.hud.stamina = combatPatch.stamina;
+        }
+
+        if (combatPatch.maxStamina !== undefined) {
+          state.localPlayer.maxStamina = combatPatch.maxStamina;
+          state.hud.maxStamina = combatPatch.maxStamina;
+        }
+
         if (respawned) {
           resetSpread(state);
           state.pendingInputs = [];
+          state.localPlayer.stamina = state.localPlayer.maxStamina;
+          state.hud.stamina = state.localPlayer.maxStamina;
+          state.players[id].stamina = state.players[id].maxStamina;
         }
       }
 

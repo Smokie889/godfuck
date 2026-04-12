@@ -1,10 +1,21 @@
-import { LOCAL_RENDER_LERP, PLAYER_SIZE, PLAYER_SPEED, REMOTE_RENDER_LERP } from "../config.js";
+import {
+  DASH_COOLDOWN_MS,
+  DASH_DURATION_MS,
+  DASH_MIN_STAMINA_REQUIRED,
+  DASH_SPEED_MULTIPLIER,
+  DASH_STAMINA_COST,
+  LOCAL_RENDER_LERP,
+  PLAYER_SIZE,
+  PLAYER_SPEED,
+  REMOTE_RENDER_LERP,
+  STAMINA_RECOVERY_PER_SECOND,
+} from "../config.js";
 import { clamp, lerp, normalize } from "./math.js";
 
 // client 端的輕量碰撞預測半徑，先和 server 保持同樣大小。
 const PLAYER_COLLISION_RADIUS = PLAYER_SIZE * 0.5;
 
-function buildMovementDelta(inputState, deltaTime, facingHolder) {
+function getMovementDirection(inputState) {
   let dx = 0;
   let dy = 0;
 
@@ -17,18 +28,79 @@ function buildMovementDelta(inputState, deltaTime, facingHolder) {
     return null;
   }
 
-  const dir = normalize(dx, dy);
-  dx = dir.x;
-  dy = dir.y;
+  return normalize(dx, dy);
+}
+
+function tryStartLocalDash(player, inputState) {
+  if (!inputState.dash) {
+    return false;
+  }
+
+  if (player.dashTimeRemaining > 0 || player.dashCooldownRemaining > 0) {
+    return false;
+  }
+
+  if (player.stamina < DASH_MIN_STAMINA_REQUIRED) {
+    return false;
+  }
+
+  const dir = getMovementDirection(inputState);
+  if (!dir) {
+    return false;
+  }
+
+  player.stamina = Math.max(0, player.stamina - DASH_STAMINA_COST);
+  player.dashTimeRemaining = DASH_DURATION_MS / 1000;
+  player.dashCooldownRemaining = DASH_COOLDOWN_MS / 1000;
+  player.dashFacing.x = dir.x;
+  player.dashFacing.y = dir.y;
+  player.moveFacing.x = dir.x;
+  player.moveFacing.y = dir.y;
+  return true;
+}
+
+function tickLocalDashState(player, deltaTime) {
+  player.dashTimeRemaining = Math.max(0, player.dashTimeRemaining - deltaTime);
+  player.dashCooldownRemaining = Math.max(0, player.dashCooldownRemaining - deltaTime);
+
+  if (player.dashTimeRemaining > 0) {
+    return;
+  }
+
+  player.stamina = Math.min(
+    player.maxStamina,
+    player.stamina + STAMINA_RECOVERY_PER_SECOND * deltaTime
+  );
+}
+
+function buildMovementDelta(player, inputState, deltaTime, facingHolder) {
+  tryStartLocalDash(player, inputState);
+
+  if (player.dashTimeRemaining > 0) {
+    if (facingHolder) {
+      facingHolder.x = player.dashFacing.x;
+      facingHolder.y = player.dashFacing.y;
+    }
+
+    return {
+      dx: player.dashFacing.x * PLAYER_SPEED * DASH_SPEED_MULTIPLIER * deltaTime,
+      dy: player.dashFacing.y * PLAYER_SPEED * DASH_SPEED_MULTIPLIER * deltaTime,
+    };
+  }
+
+  const dir = getMovementDirection(inputState);
+  if (!dir) {
+    return null;
+  }
 
   if (facingHolder) {
-    facingHolder.x = dx;
-    facingHolder.y = dy;
+    facingHolder.x = dir.x;
+    facingHolder.y = dir.y;
   }
 
   return {
-    dx: dx * PLAYER_SPEED * deltaTime,
-    dy: dy * PLAYER_SPEED * deltaTime,
+    dx: dir.x * PLAYER_SPEED * deltaTime,
+    dy: dir.y * PLAYER_SPEED * deltaTime,
   };
 }
 
@@ -73,8 +145,9 @@ function collidesWithOtherPlayers(state, candidatePosition) {
 }
 
 export function applyInputToPosition(position, inputState, deltaTime, facingHolder, bounds) {
-  const movement = buildMovementDelta(inputState, deltaTime, facingHolder);
+  const movement = buildMovementDelta(position, inputState, deltaTime, facingHolder);
   if (!movement) {
+    tickLocalDashState(position, deltaTime);
     return;
   }
 
@@ -83,6 +156,7 @@ export function applyInputToPosition(position, inputState, deltaTime, facingHold
 
   position.x = clamp(position.x, 0, bounds.width - PLAYER_SIZE);
   position.y = clamp(position.y, 0, bounds.height - PLAYER_SIZE);
+  tickLocalDashState(position, deltaTime);
 }
 
 // 只對本地玩家做輕量版玩家碰撞預測：
@@ -95,8 +169,9 @@ export function applyInputToPositionWithPlayerCollision(
   facingHolder,
   bounds
 ) {
-  const movement = buildMovementDelta(inputState, deltaTime, facingHolder);
+  const movement = buildMovementDelta(position, inputState, deltaTime, facingHolder);
   if (!movement) {
+    tickLocalDashState(position, deltaTime);
     return;
   }
 
@@ -116,6 +191,7 @@ export function applyInputToPositionWithPlayerCollision(
   if (!collidesWithOtherPlayers(state, desiredPosition)) {
     position.x = desiredPosition.x;
     position.y = desiredPosition.y;
+    tickLocalDashState(position, deltaTime);
     return;
   }
 
@@ -130,6 +206,7 @@ export function applyInputToPositionWithPlayerCollision(
   if (!collidesWithOtherPlayers(state, xOnlyPosition)) {
     position.x = xOnlyPosition.x;
     position.y = xOnlyPosition.y;
+    tickLocalDashState(position, deltaTime);
     return;
   }
 
@@ -145,6 +222,8 @@ export function applyInputToPositionWithPlayerCollision(
     position.x = yOnlyPosition.x;
     position.y = yOnlyPosition.y;
   }
+
+  tickLocalDashState(position, deltaTime);
 }
 
 export function simulateLocalTick(state, deltaTime, bounds) {

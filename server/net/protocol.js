@@ -1,5 +1,6 @@
 const CLIENT_MESSAGE_TYPES = {
   INPUT: "input",
+  DASH: "dash",
   AIM: "aim",
   SHOOT: "shoot",
   CHAT: "chat",

@@ -1,5 +1,14 @@
 # TODO
 
+## Recent Updates
+- Added `Shift` dash with stamina cost, cooldown, and no invincibility.
+- Added stamina HUD support and local stamina recovery prediction.
+- Increased bullet speed to improve shot feel and reduce slow projectile travel.
+- Fixed held-`Shift` dash input so one key press triggers only one dash.
+- Fixed stuck movement caused by `Shift` + WASD casing/focus edge cases.
+- Added PNG/ICO favicons to both entry pages.
+- Note: old dash items below may now be outdated and should be treated as completed unless they refer to future balancing.
+
 ## Current Status
 中文說明：這裡記錄目前專案已經完成的功能，避免下次開工時忘記做到哪。
 
@@ -82,3 +91,4 @@
 - 備註：瞄準方向現在不是高頻 state 的一部分，而是透過節流的 aim event 更新。
 - Aim facing is no longer part of every high-frequency state broadcast. It is updated through throttled aim events.
 - Player state broadcasts now send only changed players instead of resending the full player list every tick.
+- Stamina recovery is now predicted locally; the server only corrects stamina on meaningful state changes such as spending stamina or respawn reset.

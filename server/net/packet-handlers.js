@@ -1,5 +1,6 @@
 const { handleShoot } = require("../systems/bullet-system");
 const { createChatMessage } = require("../systems/chat-system");
+const { tryStartDash } = require("../systems/movement-system");
 const { CLIENT_MESSAGE_TYPES, SERVER_MESSAGE_TYPES } = require("./protocol");
 
 function handleInputPacket(player, data) {
@@ -11,6 +12,10 @@ function handleInputPacket(player, data) {
   };
 
   player.lastProcessedInput = data.seq || 0;
+
+  if (data.dash) {
+    tryStartDash(player, player.inputState);
+  }
 }
 
 function handleAimPacket(player, data) {
@@ -51,6 +56,10 @@ function handlePacket({ message, playerId, players, bullets, ws, wss, broadcast 
   switch (data.type) {
     case CLIENT_MESSAGE_TYPES.INPUT:
       handleInputPacket(player, data);
+      return;
+
+    case CLIENT_MESSAGE_TYPES.DASH:
+      tryStartDash(player, player.inputState);
       return;
 
     case CLIENT_MESSAGE_TYPES.AIM:

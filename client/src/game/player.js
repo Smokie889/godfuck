@@ -7,10 +7,17 @@ export function copyPlayerState(source) {
     y: source.y,
     hp: source.hp,
     maxHp: source.maxHp,
+    stamina: source.stamina ?? 100,
+    maxStamina: source.maxStamina ?? 100,
     lastProcessedInput: source.lastProcessedInput || 0,
     isHit: !!source.isHit,
+    dashTimeRemaining: source.dashTimeRemaining ?? 0,
+    dashCooldownRemaining: source.dashCooldownRemaining ?? 0,
     moveFacing: source.moveFacing
       ? { x: source.moveFacing.x, y: source.moveFacing.y }
+      : { x: 0, y: -1 },
+    dashFacing: source.dashFacing
+      ? { x: source.dashFacing.x, y: source.dashFacing.y }
       : { x: 0, y: -1 },
   };
 
@@ -43,11 +50,19 @@ export function mergePlayerState(currentPlayer, nextState) {
     y: nextState.y ?? currentPlayer.y,
     hp: nextState.hp ?? currentPlayer.hp,
     maxHp: nextState.maxHp ?? currentPlayer.maxHp,
+    stamina: nextState.stamina ?? currentPlayer.stamina,
+    maxStamina: nextState.maxStamina ?? currentPlayer.maxStamina,
     lastProcessedInput: nextState.lastProcessedInput ?? currentPlayer.lastProcessedInput ?? 0,
     isHit: nextState.isHit ?? currentPlayer.isHit ?? false,
+    dashTimeRemaining: nextState.dashTimeRemaining ?? currentPlayer.dashTimeRemaining ?? 0,
+    dashCooldownRemaining:
+      nextState.dashCooldownRemaining ?? currentPlayer.dashCooldownRemaining ?? 0,
     moveFacing: nextState.moveFacing
       ? { x: nextState.moveFacing.x, y: nextState.moveFacing.y }
       : currentPlayer.moveFacing,
+    dashFacing: nextState.dashFacing
+      ? { x: nextState.dashFacing.x, y: nextState.dashFacing.y }
+      : currentPlayer.dashFacing,
     appearance: nextState.appearance
       ? { chatBubbleStyle: nextState.appearance.chatBubbleStyle }
       : currentPlayer.appearance,
@@ -71,9 +86,15 @@ export function mergeMovementState(currentPlayer, nextState) {
     x: nextState.x ?? currentPlayer.x,
     y: nextState.y ?? currentPlayer.y,
     lastProcessedInput: nextState.lastProcessedInput ?? currentPlayer.lastProcessedInput ?? 0,
+    dashTimeRemaining: nextState.dashTimeRemaining ?? currentPlayer.dashTimeRemaining ?? 0,
+    dashCooldownRemaining:
+      nextState.dashCooldownRemaining ?? currentPlayer.dashCooldownRemaining ?? 0,
     moveFacing: nextState.moveFacing
       ? { x: nextState.moveFacing.x, y: nextState.moveFacing.y }
       : currentPlayer.moveFacing,
+    dashFacing: nextState.dashFacing
+      ? { x: nextState.dashFacing.x, y: nextState.dashFacing.y }
+      : currentPlayer.dashFacing,
   };
 }
 
@@ -88,6 +109,8 @@ export function mergeCombatState(currentPlayer, nextState) {
     id: nextState.id || currentPlayer.id,
     hp: nextState.hp ?? currentPlayer.hp,
     maxHp: nextState.maxHp ?? currentPlayer.maxHp,
+    stamina: nextState.stamina ?? currentPlayer.stamina,
+    maxStamina: nextState.maxStamina ?? currentPlayer.maxStamina,
     isHit: nextState.isHit ?? currentPlayer.isHit ?? false,
   };
 }

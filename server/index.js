@@ -2,6 +2,7 @@ const { TICK_INTERVAL, SERVER_PORT } = require("./config");
 const { players, bullets } = require("./world/state");
 const { createPlayer } = require("./world/create-player");
 const { resolvePlayerCollisions } = require("./systems/player-collision-system");
+const { tickPlayerDashState } = require("./systems/movement-system");
 const {
   serializePlayerPatches,
   serializePlayer,
@@ -98,6 +99,9 @@ setInterval(() => {
   // 先解玩家移動與玩家間碰撞，再更新子彈與命中結果。
   resolvePlayerCollisions(players, deltaTime);
   updateBullets({ bullets, players, deltaTime, wss, broadcast });
+  for (const id in players) {
+    tickPlayerDashState(players[id], deltaTime);
+  }
 
   // 把同步拆成移動 patch 和戰鬥 patch：
   // 高頻的位移/ack 走 movement，血量/受擊走 combat。

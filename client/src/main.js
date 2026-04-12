@@ -53,6 +53,7 @@ function cloneInputState(inputState) {
     down: inputState.down,
     left: inputState.left,
     right: inputState.right,
+    dash: inputState.dash,
   };
 }
 
@@ -98,6 +99,7 @@ function gameLoop(now) {
     const inputSnapshot = cloneInputState(state.inputState);
     const inputSignature = getInputSignature(inputSnapshot);
     const shouldSendInput =
+      inputSnapshot.dash ||
       hasMovementInput(inputSnapshot) ||
       inputSignature !== state.localMeta.lastSentInputSignature;
 
