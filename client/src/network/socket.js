@@ -2,7 +2,11 @@ import { LOCAL_PREDICTION_SCALE, TICK_DELTA, WS_URL } from "../config.js";
 import { logOutgoing, logRuntime } from "../debug/debugUi.js";
 import { copyBulletState } from "../game/bullets.js";
 import { applyInputToPosition } from "../game/movement.js";
-import { copyPlayerState } from "../game/player.js";
+import {
+  copyPlayerState,
+  mergeCombatState,
+  mergeMovementState,
+} from "../game/player.js";
 import { resetSpread } from "../game/shooting.js";
 
 export function createSocketClient(state, bounds, chatController, playerId) {
@@ -105,7 +109,6 @@ export function createSocketClient(state, bounds, chatController, playerId) {
         y,
       })
     );
-    logOutgoing(state, "AIM", { x, y });
   }
 
   function sendChat(text) {
@@ -148,7 +151,6 @@ export function createSocketClient(state, bounds, chatController, playerId) {
       if (typeof sentAt === "number") {
         delete state.network.pendingPings[data.id];
         updatePing(performance.now() - sentAt);
-        logRuntime(state, "PONG", { id: data.id, ping: Math.round(state.network.pingMs) });
       }
       return;
     }
@@ -199,13 +201,9 @@ export function createSocketClient(state, bounds, chatController, playerId) {
       return;
     }
 
-    if (data.type === "state") {
+    if (data.type === "movementPatch") {
       for (const id in data.players) {
-        const serverPlayer = copyPlayerState(data.players[id]);
-        const previousAimFacing = state.players[id]?.aimFacing;
-        if (previousAimFacing && !serverPlayer.aimFacing) {
-          serverPlayer.aimFacing = { ...previousAimFacing };
-        }
+        const serverPlayer = mergeMovementState(state.players[id], data.players[id]);
         state.players[id] = serverPlayer;
 
         if (!state.renderPlayers[id]) {
@@ -216,21 +214,11 @@ export function createSocketClient(state, bounds, chatController, playerId) {
           continue;
         }
 
-        const previousHp = state.localMeta.previousHp;
         const serverAck = serverPlayer.lastProcessedInput || 0;
         state.localPlayer.x = serverPlayer.x;
         state.localPlayer.y = serverPlayer.y;
         state.localPlayer.moveFacing = { ...serverPlayer.moveFacing };
-        state.localMeta.previousHp = serverPlayer.hp;
         state.pendingInputs = state.pendingInputs.filter((entry) => entry.seq > serverAck);
-
-        const respawned =
-          serverPlayer.hp === serverPlayer.maxHp && previousHp < serverPlayer.hp;
-
-        if (respawned) {
-          resetSpread(state);
-          state.pendingInputs = [];
-        }
 
         for (const pendingInput of state.pendingInputs) {
           applyInputToPosition(
@@ -240,6 +228,30 @@ export function createSocketClient(state, bounds, chatController, playerId) {
             state.localPlayer.moveFacing,
             bounds
           );
+        }
+      }
+
+      return;
+    }
+
+    if (data.type === "combatPatch") {
+      for (const id in data.players) {
+        const serverPlayer = mergeCombatState(state.players[id], data.players[id]);
+        state.players[id] = serverPlayer;
+
+        if (id !== state.myId) {
+          continue;
+        }
+
+        const previousHp = state.localMeta.previousHp;
+        state.localMeta.previousHp = serverPlayer.hp;
+
+        const respawned =
+          serverPlayer.hp === serverPlayer.maxHp && previousHp < serverPlayer.hp;
+
+        if (respawned) {
+          resetSpread(state);
+          state.pendingInputs = [];
         }
       }
 
@@ -266,13 +278,11 @@ export function createSocketClient(state, bounds, chatController, playerId) {
 
     if (data.type === "bulletSpawn") {
       state.bullets[data.bullet.id] = copyBulletState(data.bullet);
-      logRuntime(state, "BULLET_SPAWN", { id: data.bullet.id, ownerId: data.bullet.ownerId });
       return;
     }
 
     if (data.type === "bulletRemove") {
       delete state.bullets[data.bulletId];
-      logRuntime(state, "BULLET_REMOVE", { id: data.bulletId });
       return;
     }
 

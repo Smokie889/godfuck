@@ -10,6 +10,11 @@ body {
   overflow: hidden;
 }
 
+body.debug-page {
+  display: block;
+  overflow: auto;
+}
+
 canvas {
   background: #222;
   border: 1px solid #555;
@@ -17,8 +22,8 @@ canvas {
 
 .game-shell {
   display: flex;
-  align-items: stretch;
-  gap: 12px;
+  align-items: center;
+  justify-content: center;
 }
 
 .game-stage {
@@ -80,6 +85,15 @@ canvas {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.debug-shell {
+  min-height: 100vh;
+  padding: 16px;
+  box-sizing: border-box;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
 }
 
 .debug-section {
@@ -178,6 +192,21 @@ canvas {
   color: #ddd;
   line-height: 1.35;
   word-break: break-word;
+}
+
+.debug-empty-state {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  padding: 12px 14px;
+  border: 1px solid #2f2f2f;
+  background: rgba(18, 18, 18, 0.92);
+  color: #cfcfcf;
+  font-size: 13px;
+}
+
+.debug-empty-state.hidden {
+  display: none;
 }
 
 .join-overlay {
@@ -292,6 +321,11 @@ canvas {
     width: 800px;
     max-width: calc(100vw - 24px);
     height: 220px;
+  }
+
+  .debug-shell {
+    flex-direction: column;
+    align-items: center;
   }
 
   .game-stage {

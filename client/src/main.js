@@ -8,8 +8,10 @@ import {
 } from "./game/shooting.js";
 import { updateLocalBullets } from "./game/bullets.js";
 import { createChatController } from "./chat/chatUi.js";
-import { createDebugUi } from "./debug/debugUi.js";
+import { buildDebugSnapshot } from "./debug/debugUi.js";
+import { createDebugBridge } from "./debug/debugBridge.js";
 import { simulateInputTick, updateRenderPlayers } from "./game/movement.js";
+import { createHudUi } from "./hud/hudUi.js";
 import { createInputController } from "./input/inputController.js";
 import { createSocketClient } from "./network/socket.js";
 import { createRenderer } from "./render/renderer.js";
@@ -21,10 +23,6 @@ const chatInput = document.getElementById("chatInput");
 const joinOverlay = document.getElementById("joinOverlay");
 const joinForm = document.getElementById("joinForm");
 const joinNameInput = document.getElementById("joinNameInput");
-const outgoingFixedDebug = document.getElementById("outgoingFixedDebug");
-const outgoingDebug = document.getElementById("outgoingDebug");
-const runtimeFixedDebug = document.getElementById("runtimeFixedDebug");
-const runtimeDebug = document.getElementById("runtimeDebug");
 const hudHealth = document.getElementById("hudHealth");
 const hudStamina = document.getElementById("hudStamina");
 const hudPing = document.getElementById("hudPing");
@@ -43,7 +41,8 @@ let gameStarted = false;
 let state = null;
 let socketClient = null;
 let renderer = null;
-let debugUi = null;
+let hudUi = null;
+let debugBridge = null;
 
 function cloneInputState(inputState) {
   return {
@@ -115,7 +114,8 @@ function gameLoop(now) {
 
   updateRenderPlayers(state);
   renderer.draw();
-  debugUi.render();
+  hudUi.render();
+  debugBridge.publish(buildDebugSnapshot(state));
   requestAnimationFrame(gameLoop);
 }
 
@@ -141,15 +141,12 @@ function startGame(requestedPlayerId) {
   const chatController = createChatController(state, chatBox, chatInput);
   socketClient = createSocketClient(state, bounds, chatController, requestedPlayerId);
   renderer = createRenderer(canvas, state, socketClient);
-  debugUi = createDebugUi(state, {
-    outgoingFixedDebug,
-    outgoingDebug,
-    runtimeFixedDebug,
-    runtimeDebug,
+  hudUi = createHudUi(state, {
     hudHealth,
     hudStamina,
     hudPing,
   });
+  debugBridge = createDebugBridge();
 
   createInputController(state, chatInput, {
     canvas,

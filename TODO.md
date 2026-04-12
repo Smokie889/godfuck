@@ -81,3 +81,4 @@
 - Bullet positions are no longer broadcast every tick. The server sends bullet spawn/remove events and clients simulate bullet motion locally.
 - 備註：瞄準方向現在不是高頻 state 的一部分，而是透過節流的 aim event 更新。
 - Aim facing is no longer part of every high-frequency state broadcast. It is updated through throttled aim events.
+- Player state broadcasts now send only changed players instead of resending the full player list every tick.

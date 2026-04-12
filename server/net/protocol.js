@@ -8,7 +8,8 @@ const CLIENT_MESSAGE_TYPES = {
 
 const SERVER_MESSAGE_TYPES = {
   INIT: "init",
-  STATE: "state",
+  MOVEMENT_PATCH: "movementPatch",
+  COMBAT_PATCH: "combatPatch",
   AIM: "aim",
   BULLET_SPAWN: "bulletSpawn",
   BULLET_REMOVE: "bulletRemove",
