@@ -8,7 +8,7 @@ const {
   setRealtimeBridge,
 } = require("./auth/auth-http");
 const {
-  DEFAULT_ROOM_ID,
+  ackRoomMemberSync,
   deleteRoomIfEmpty,
   getRoom,
   listRooms,
@@ -24,9 +24,14 @@ const {
 } = require("./net/serialize-system");
 const { serializeBullets, updateBullets } = require("./systems/bullet-system");
 const { ensureWeaponDrops, serializeWeaponDrops } = require("./systems/weapon-drop-system");
-const { createSocketServer, broadcastToRoom, broadcastToRoomLobby } = require("./net/socket-server");
+const {
+  createSocketServer,
+  broadcastToRoom,
+  broadcastToRoomLobby,
+  broadcastToRoomLobbyEach,
+} = require("./net/socket-server");
 const { handlePacket } = require("./net/packet-handlers");
-const { SERVER_MESSAGE_TYPES } = require("./net/protocol");
+const { CLIENT_MESSAGE_TYPES, SERVER_MESSAGE_TYPES } = require("./net/protocol");
 
 const { initDatabase } = require("./db");
 initDatabase();
@@ -53,12 +58,10 @@ function publishRoomLobbyUpdate(room, currentUserId = null) {
     return;
   }
 
-  for (const member of Object.values(room.members || {})) {
-    broadcastToRoomLobby(wss, room.id, {
-      type: SERVER_MESSAGE_TYPES.ROOM_LOBBY_SYNC,
-      room: serializeRoomDetail(room, member.userId || currentUserId),
-    });
-  }
+  broadcastToRoomLobbyEach(wss, room.id, (client) => ({
+    type: SERVER_MESSAGE_TYPES.ROOM_LOBBY_SYNC,
+    room: serializeRoomDetail(room, client.id || currentUserId),
+  }));
 }
 
 function publishRoomClosed(roomId) {
@@ -124,6 +127,22 @@ wss.on("connection", (ws, req) => {
         room: serializeRoomDetail(room, requestedUserId),
       })
     );
+
+    ws.on("message", (message) => {
+      try {
+        const data = JSON.parse(message.toString());
+
+        if (data.type !== CLIENT_MESSAGE_TYPES.ROOM_LOBBY_ACK) {
+          return;
+        }
+
+        const roomAfterAck = ackRoomMemberSync(room.id, requestedUserId, data.syncNonce);
+        publishRoomLobbyUpdate(roomAfterAck);
+        publishRoomListUpdate();
+      } catch (error) {
+        console.error("Room lobby socket error:", error);
+      }
+    });
 
     ws.on("close", () => {});
     return;

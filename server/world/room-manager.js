@@ -5,6 +5,31 @@ const DEFAULT_ROOM_ID = "lobby-01";
 const ROOM_MAX_PLAYERS = 4;
 const ROOM_START_TRANSITION_MS = 3000;
 
+function createPendingMembersError(room) {
+  const error = new Error("ROOM_NOT_READY");
+  error.details = {
+    pendingMembers: Object.values(room.members)
+      .filter((member) => !member.isReady)
+      .map((member) => ({
+        userId: member.userId,
+        displayName: member.displayName,
+      })),
+  };
+  return error;
+}
+
+function resetRoomSyncState(room) {
+  if (!room) {
+    return;
+  }
+
+  room.syncNonce = room.syncNonce || 0;
+
+  for (const member of Object.values(room.members || {})) {
+    member.syncStatus = "idle";
+  }
+}
+
 function sanitizeRoomId(rawRoomId) {
   const trimmed = String(rawRoomId || "")
     .trim()
@@ -58,6 +83,7 @@ function createPublicRoom(rawLabel, ownerProfile) {
     userId: ownerProfile.userId,
     displayName: ownerProfile.displayName,
     isReady: false,
+    syncStatus: "idle",
     joinedAt: Date.now(),
     squadId: null,
   };
@@ -96,6 +122,7 @@ function addMemberToRoom(rawRoomId, profile) {
     userId: profile.userId,
     displayName: profile.displayName,
     isReady: false,
+    syncStatus: "idle",
     joinedAt: Date.now(),
     squadId: null,
   };
@@ -159,11 +186,46 @@ function startRoomMatch(rawRoomId, userId) {
   }
 
   if (!canStartRoom(room)) {
-    throw new Error("ROOM_NOT_READY");
+    throw createPendingMembersError(room);
   }
 
-  room.status = "starting";
-  room.gameStartAt = Date.now() + ROOM_START_TRANSITION_MS;
+  room.status = "syncing";
+  room.gameStartAt = null;
+  room.syncNonce = (room.syncNonce || 0) + 1;
+
+  for (const member of Object.values(room.members)) {
+    member.syncStatus = "pending";
+  }
+
+  return room;
+}
+
+function ackRoomMemberSync(rawRoomId, userId, syncNonce) {
+  const room = getRoomOrThrow(rawRoomId);
+
+  if (room.status !== "syncing") {
+    return room;
+  }
+
+  if (Number(syncNonce) !== Number(room.syncNonce)) {
+    return room;
+  }
+
+  const member = room.members[userId];
+
+  if (!member) {
+    throw new Error("ROOM_MEMBER_NOT_FOUND");
+  }
+
+  member.syncStatus = "synced";
+
+  const allSynced = Object.values(room.members).every((roomMember) => roomMember.syncStatus === "synced");
+
+  if (allSynced) {
+    room.status = "starting";
+    room.gameStartAt = Date.now() + ROOM_START_TRANSITION_MS;
+  }
+
   return room;
 }
 
@@ -206,12 +268,14 @@ function serializeRoomDetail(room, currentUserId) {
       userId: member.userId,
       displayName: member.displayName,
       isReady: member.isReady,
+      syncStatus: member.syncStatus || "idle",
       squadId: member.squadId,
       isHost: member.userId === room.hostUserId,
     }));
 
   return {
     ...serializeRoomSummary(room),
+    syncNonce: room.syncNonce || 0,
     gameStartAt: room.gameStartAt,
     currentUserId,
     isCurrentUserHost: room.hostUserId === currentUserId,
@@ -221,6 +285,7 @@ function serializeRoomDetail(room, currentUserId) {
 }
 
 module.exports = {
+  ackRoomMemberSync,
   addMemberToRoom,
   ROOM_MAX_PLAYERS,
   ROOM_START_TRANSITION_MS,
@@ -232,6 +297,7 @@ module.exports = {
   getOrCreateRoom,
   listRooms,
   removeMemberFromRoom,
+  resetRoomSyncState,
   serializeRoomDetail,
   serializeRoomSummary,
   setRoomMemberReady,

@@ -90,6 +90,8 @@ let activeRoomLobby = null;
 let isCurrentUserReady = false;
 let roomLobbySocket = null;
 let roomLobbySocketClosing = false;
+let pendingRoomLobbyAckTimer = null;
+let sentRoomLobbyAckNonce = null;
 let roomStartCountdownTimer = null;
 let roomStartCommitted = false;
 let lobbyStream = null;
@@ -231,6 +233,11 @@ function closeLobbyStream() {
 }
 
 function closeRoomLobbySocket() {
+  if (pendingRoomLobbyAckTimer) {
+    window.clearTimeout(pendingRoomLobbyAckTimer);
+    pendingRoomLobbyAckTimer = null;
+  }
+
   if (roomLobbySocket) {
     roomLobbySocketClosing = true;
     roomLobbySocket.close(1000, "ROOM_LOBBY_END");
@@ -447,10 +454,51 @@ async function startRoomMatch(roomId, userId) {
   const payload = await response.json().catch(() => ({ ok: false, error: "INVALID_RESPONSE" }));
 
   if (!response.ok || !payload.ok) {
-    throw new Error(payload.error || "REQUEST_FAILED");
+    const error = new Error(payload.error || "REQUEST_FAILED");
+    error.details = payload.details || null;
+    throw error;
   }
 
   return payload.room;
+}
+
+function queueRoomLobbyAck(room) {
+  if (!roomLobbySocket || roomLobbySocket.readyState !== WebSocket.OPEN || !currentUser) {
+    return;
+  }
+
+  const selfMember = room.members.find((member) => member.userId === currentUser.userId);
+
+  if (!selfMember || selfMember.syncStatus !== "pending") {
+    return;
+  }
+
+  if (sentRoomLobbyAckNonce === room.syncNonce) {
+    return;
+  }
+
+  if (pendingRoomLobbyAckTimer) {
+    window.clearTimeout(pendingRoomLobbyAckTimer);
+  }
+
+  pendingRoomLobbyAckTimer = window.setTimeout(() => {
+    if (!roomLobbySocket || roomLobbySocket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    if (!activeRoomLobby || activeRoomLobby.syncNonce !== room.syncNonce || activeRoomLobby.status !== "syncing") {
+      return;
+    }
+
+    sentRoomLobbyAckNonce = room.syncNonce;
+    roomLobbySocket.send(
+      JSON.stringify({
+        type: "roomLobbyAck",
+        syncNonce: room.syncNonce,
+      })
+    );
+    pendingRoomLobbyAckTimer = null;
+  }, 180);
 }
 
 function openRoomLobbySocket(roomId) {
@@ -473,6 +521,7 @@ function openRoomLobbySocket(roomId) {
       activeRoomLobby = data.room;
       const selfMember = data.room.members.find((member) => member.userId === currentUser.userId);
       isCurrentUserReady = !!selfMember?.isReady;
+      queueRoomLobbyAck(data.room);
       renderRoomLobby();
       syncRoomStartTransition();
       return;
@@ -575,7 +624,7 @@ function syncRoomLobbyActions() {
 
   readyRoomButton.disabled = !isWaiting || isCurrentUserReady;
   cancelReadyButton.disabled = !isWaiting || !isCurrentUserReady;
-  startRoomGameButton.disabled = !isWaiting || !isHost || !activeRoomLobby?.canStart;
+  startRoomGameButton.disabled = !isWaiting || !isHost;
 }
 
 function renderRoomLobby() {
@@ -600,7 +649,7 @@ function renderGameStartMembers() {
 
     const sync = document.createElement("div");
     sync.className = "game-start-member-sync";
-    sync.textContent = "SYNCING";
+    sync.textContent = member.syncStatus === "synced" ? "SYNCED" : "SYNCING";
 
     row.appendChild(name);
     row.appendChild(sync);
@@ -609,6 +658,11 @@ function renderGameStartMembers() {
 }
 
 function hideGameStartOverlay() {
+  if (pendingRoomLobbyAckTimer) {
+    window.clearTimeout(pendingRoomLobbyAckTimer);
+    pendingRoomLobbyAckTimer = null;
+  }
+
   if (roomStartCountdownTimer) {
     window.clearInterval(roomStartCountdownTimer);
     roomStartCountdownTimer = null;
@@ -690,6 +744,13 @@ function syncRoomStartTransition() {
     return;
   }
 
+  if (activeRoomLobby.status === "syncing") {
+    gameStartOverlay.classList.remove("hidden");
+    gameStartCountdown.textContent = "SYNC";
+    renderGameStartMembers();
+    return;
+  }
+
   if (!activeRoomLobby.gameStartAt || activeRoomLobby.status !== "starting") {
     hideGameStartOverlay();
     return;
@@ -725,6 +786,7 @@ async function refreshActiveRoomLobby() {
     activeRoomLobby = room;
     const selfMember = room.members.find((member) => member.userId === currentUser.userId);
     isCurrentUserReady = !!selfMember?.isReady;
+    queueRoomLobbyAck(room);
     renderRoomLobby();
     syncRoomStartTransition();
   } catch (error) {
@@ -752,6 +814,7 @@ async function openRoomLobby(room) {
   activeRoomLobby = joinedRoom;
   const selfMember = joinedRoom.members.find((member) => member.userId === currentUser.userId);
   isCurrentUserReady = !!selfMember?.isReady;
+  sentRoomLobbyAckNonce = null;
   closeProfileModal();
   closeCreateRoomModal();
   closeLobbyStream();
@@ -771,6 +834,7 @@ async function closeRoomLobby() {
   hideGameStartOverlay();
   activeRoomLobby = null;
   isCurrentUserReady = false;
+  sentRoomLobbyAckNonce = null;
   roomLobbyOverlay.classList.add("hidden");
   lobbyOverlay.classList.remove("hidden");
   await refreshLobby();
@@ -862,6 +926,7 @@ async function openLobby(user) {
   hideGameOverOverlay();
   closeRoomLobbySocket();
   roomLobbyOverlay.classList.add("hidden");
+  sentRoomLobbyAckNonce = null;
   joinOverlay.classList.add("hidden");
   lobbyOverlay.classList.remove("hidden");
   openLobbyStream();
@@ -1049,6 +1114,14 @@ startRoomGameButton.addEventListener("click", async () => {
     renderRoomLobby();
     syncRoomStartTransition();
   } catch (error) {
+    if (error.message === "ROOM_NOT_READY" && error.details?.pendingMembers?.length) {
+      const pendingNames = error.details.pendingMembers
+        .map((member) => member.displayName || member.userId)
+        .join(", ");
+      window.alert(`Still waiting for: ${pendingNames}`);
+      return;
+    }
+
     window.alert(mapAuthError(error.message));
   }
 });

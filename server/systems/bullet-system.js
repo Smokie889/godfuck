@@ -6,6 +6,7 @@ const { SERVER_MESSAGE_TYPES } = require("../net/protocol");
 const { resetPlayerWeapon } = require("./weapon-drop-system");
 const { getWeaponDefinition } = require("./weapon-system");
 const { randomSpawn } = require("../world/spawn");
+const { resetRoomSyncState } = require("../world/room-manager");
 
 let nextBulletId = 1;
 
@@ -69,6 +70,7 @@ function handlePlayerElimination({ hitTarget, players, room, roomId, wss, broadc
   if (alivePlayers.length <= 1) {
     const winner = alivePlayers[0] || null;
     room.status = "waiting";
+    resetRoomSyncState(room);
     room.gameStartAt = null;
 
     for (const member of Object.values(room.members || {})) {

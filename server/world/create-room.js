@@ -9,6 +9,7 @@ function createRoom(id, options = {}) {
     hostUserId: options.hostUserId || null,
     maxPlayers: options.maxPlayers || 4,
     members: {},
+    syncNonce: 0,
     gameStartAt: null,
     players: {},
     bullets: {},

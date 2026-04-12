@@ -31,8 +31,23 @@ function broadcastToRoomLobby(wss, roomId, data) {
   );
 }
 
+function broadcastToRoomLobbyEach(wss, roomId, buildData) {
+  for (const client of wss.clients) {
+    if (client.readyState !== WebSocket.OPEN) {
+      continue;
+    }
+
+    if (client.roomId !== roomId || client.channel !== "roomLobby") {
+      continue;
+    }
+
+    client.send(JSON.stringify(buildData(client)));
+  }
+}
+
 module.exports = {
   createSocketServer,
+  broadcastToRoomLobbyEach,
   broadcastToRoomLobby,
   broadcastToRoom,
 };

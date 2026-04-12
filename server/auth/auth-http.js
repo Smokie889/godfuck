@@ -302,7 +302,11 @@ function handleAuthError(res, error) {
     message === "ROOM_HOST_ONLY" ||
     message === "ROOM_ALREADY_STARTED"
   ) {
-    sendJson(res, 400, { ok: false, error: message });
+    sendJson(res, 400, {
+      ok: false,
+      error: message,
+      details: error?.details || null,
+    });
     return;
   }
 

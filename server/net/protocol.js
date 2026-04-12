@@ -7,6 +7,7 @@ const CLIENT_MESSAGE_TYPES = {
   DROP_WEAPON: "dropWeapon",
   CHAT: "chat",
   PING: "ping",
+  ROOM_LOBBY_ACK: "roomLobbyAck",
 };
 
 const SERVER_MESSAGE_TYPES = {
