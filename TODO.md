@@ -40,6 +40,10 @@
 中文說明：這裡是還沒做的功能，照優先度往下排。
 
 ### High Priority
+- 待做：房間開局要先送地圖、陣營與其他初始化封包，等所有玩家都回傳 ACK 完成同步後，才開始共用的 `3 2 1` 倒數。
+- Finalize room start hard-sync flow: send map/setup payloads first, wait until every client returns ACK, and only then start the shared `3 2 1` countdown.
+- 待做：把 ACK 同步屏障保留給未來的地圖資料、出生規則、陣營分配與其他房間初始化內容。
+- Reserve the ACK barrier for future pre-game initialization packets such as map data, spawn rules, squad assignment, or other room-specific setup.
 - 待做：如果現在槍感還是太鬆，要再縮短散布回復時間。
 - Reduce spread recovery time further if the current weapon feel is still too loose.
 - 待做：加入 `Shift` dash。
